@@ -1,4 +1,3 @@
-cat > /mnt/user-data/outputs/reports.js << 'EOF'
 import { useState, useEffect } from "react";
 import { getDeals, getContacts, getActivities, getSalespersons } from "../lib/firebase";
 
@@ -402,5 +401,3 @@ export default function ReportsPage({ currentUser }) {
     </div>
   );
 }
-EOF
-echo "done"
