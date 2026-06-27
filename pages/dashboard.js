@@ -8,6 +8,7 @@ import AdminPage from "./admin";
 
 export default function Dashboard({ user, userData }) {
   const [page, setPage] = useState("dashboard");
+  if (!user) return null;
   const isAdmin = userData?.role === "admin";
 
   const pages = {
@@ -26,6 +27,7 @@ export default function Dashboard({ user, userData }) {
 }
 
 function DashboardHome({ onNav, user, userData }) {
+  if (!user) return null;
   const isAdmin = userData?.role === "admin";
   const quickActions = [
     { label:"Contacts", page:"contacts", icon:"M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z", color:"bg-blue-50 text-blue-600" },
@@ -37,7 +39,7 @@ function DashboardHome({ onNav, user, userData }) {
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-gray-900">Welcome, {user.displayName?.split(" ")[0]} 👋</h1>
+        <h1 className="text-xl font-bold text-gray-900">Welcome, {user?.displayName?.split(" ")?.[0]} 👋</h1>
         <p className="text-sm text-gray-500 mt-0.5">
           {isAdmin ? "Admin — full access" : `Salesperson: ${userData?.salesperson || "Unassigned"}`}
         </p>
