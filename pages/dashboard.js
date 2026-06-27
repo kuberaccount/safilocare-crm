@@ -5,27 +5,25 @@ import PipelinePage from "./pipeline";
 import ActivitiesPage from "./activities";
 import ReportsPage from "./reports";
 import AdminPage from "./admin";
-
+import NotificationsPage from "./notifications";
 export default function Dashboard({ user, userData }) {
   const [page, setPage] = useState("dashboard");
   if (!user) return null;
   const isAdmin = userData?.role === "admin";
-
   const pages = {
     contacts: <ContactsPage currentUser={userData} />,
     pipeline: <PipelinePage currentUser={userData} />,
     activities: <ActivitiesPage currentUser={userData} />,
     reports: <ReportsPage currentUser={userData} />,
+    notifications: <NotificationsPage currentUser={userData} />,
     ...(isAdmin ? { admin: <AdminPage /> } : {}),
   };
-
   return (
     <Layout user={user} userData={userData} active={page} onNav={setPage} isAdmin={isAdmin}>
       {page === "dashboard" ? <DashboardHome onNav={setPage} user={user} userData={userData} /> : pages[page]}
     </Layout>
   );
 }
-
 function DashboardHome({ onNav, user, userData }) {
   if (!user) return null;
   const isAdmin = userData?.role === "admin";
@@ -35,7 +33,6 @@ function DashboardHome({ onNav, user, userData }) {
     { label:"Activities", page:"activities", icon:"M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2", color:"bg-green-50 text-green-600" },
     { label:"Reports", page:"reports", icon:"M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z", color:"bg-purple-50 text-purple-600" },
   ];
-
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <div className="mb-6">
