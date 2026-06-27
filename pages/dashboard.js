@@ -9,6 +9,10 @@ import AdminPage from "./admin";
 export default function Dashboard({ user }) {
   const [page, setPage] = useState("dashboard");
   const pages = { contacts:<ContactsPage/>, pipeline:<PipelinePage/>, activities:<ActivitiesPage/>, reports:<ReportsPage/>, admin:<AdminPage/> };
+
+  // Guard: don't render until user is available (avoids SSR/prerender crash)
+  if (!user) return null;
+
   return (
     <Layout user={user} active={page} onNav={setPage}>
       {page==="dashboard" ? <DashboardHome onNav={setPage} user={user}/> : pages[page]}
@@ -26,7 +30,7 @@ function DashboardHome({ onNav, user }) {
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-gray-900">Welcome, {user.displayName?.split(" ")[0]} 👋</h1>
+        <h1 className="text-xl font-bold text-gray-900">Welcome, {user?.displayName?.split(" ")[0]} 👋</h1>
         <p className="text-sm text-gray-500 mt-1">Here's your Safilocare CRM overview.</p>
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
