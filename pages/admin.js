@@ -12,7 +12,8 @@ const STATUS_BADGE = {
 export default function AdminPage() {
   const [users, setUsers] = useState([]);
   const [salespersons, setSalespersons] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingUsers, setLoadingUsers] = useState(true);
+  const [loadingSP, setLoadingSP] = useState(true);
   const [tab, setTab] = useState("users");
 
   // Salesperson form
@@ -32,20 +33,33 @@ export default function AdminPage() {
   const [editSP, setEditSP] = useState("");
   const [editRole, setEditRole] = useState("salesperson");
 
-  // Pending quick-approve selectors
+  // Per-pending-user selectors
   const [pendingSP, setPendingSP] = useState({});
   const [pendingRole, setPendingRole] = useState({});
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    loadSalespersons();
+    loadUsers();
+  }, []);
 
-  async function load() {
-    setLoading(true);
+  // Load salespersons separately — no admin permission needed
+  async function loadSalespersons() {
+    setLoadingSP(true);
     try {
-      const [u, s] = await Promise.all([getAllUsers(), getSalespersons()]);
-      setUsers(u);
+      const s = await getSalespersons();
       setSalespersons(s);
-    } catch (e) { toast.error("Could not load: " + e.message); }
-    finally { setLoading(false); }
+    } catch (e) { toast.error("Could not load salespersons: " + e.message); }
+    finally { setLoadingSP(false); }
+  }
+
+  // Load users — requires admin permission
+  async function loadUsers() {
+    setLoadingUsers(true);
+    try {
+      const u = await getAllUsers();
+      setUsers(u);
+    } catch (e) { toast.error("Could not load users: " + e.message); }
+    finally { setLoadingUsers(false); }
   }
 
   async function approve(uid) {
@@ -54,7 +68,7 @@ export default function AdminPage() {
       const role = pendingRole[uid] || "salesperson";
       await updateDoc(doc(db, "users", uid), { status: "approved", salesperson: sp, role });
       toast.success("User approved ✅");
-      load();
+      loadUsers();
     } catch (e) { toast.error("Failed: " + e.message); }
   }
 
@@ -62,7 +76,7 @@ export default function AdminPage() {
     try {
       await rejectUser(uid);
       toast.success("User rejected");
-      load();
+      loadUsers();
     } catch (e) { toast.error("Failed: " + e.message); }
   }
 
@@ -71,7 +85,7 @@ export default function AdminPage() {
       await updateDoc(doc(db, "users", uid), { salesperson: editSP, role: editRole, status: "approved" });
       toast.success("User updated ✅");
       setEditingUser(null);
-      load();
+      loadUsers();
     } catch (e) { toast.error("Failed: " + e.message); }
   }
 
@@ -102,8 +116,8 @@ export default function AdminPage() {
       await addSalesperson(newSPName.trim(), newSPEmail.trim());
       toast.success(`${newSPName.trim()} added ✅`);
       setNewSPName(""); setNewSPEmail("");
-      load();
-    } catch (e) { toast.error("Failed: " + e.message); }
+      loadSalespersons();
+    } catch (e) { toast.error("Failed to add: " + e.message); }
     finally { setAddingSP(false); }
   }
 
@@ -112,7 +126,7 @@ export default function AdminPage() {
     try {
       await deleteSalesperson(sp.id);
       toast.success(`${sp.name} removed`);
-      load();
+      loadSalespersons();
     } catch (e) { toast.error("Failed: " + e.message); }
   }
 
@@ -163,19 +177,19 @@ export default function AdminPage() {
 
       {/* Tabs */}
       <div className="flex gap-2 mb-4 flex-wrap">
-        {[["users","👥 Users"], ["preapprove","✉️ Pre-approve by Email"], ["salespersons","🧑‍💼 Salespersons"]].map(([t, l]) => (
+        {[["users","👥 Users"],["preapprove","✉️ Pre-approve by Email"],["salespersons","🧑‍💼 Salespersons"]].map(([t,l]) => (
           <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium border transition-all ${tab === t ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}>
+            className={`px-4 py-2 rounded-lg text-sm font-medium border transition-all ${tab===t?"bg-blue-600 text-white border-blue-600":"bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}>
             {l}
           </button>
         ))}
       </div>
 
       {/* USERS TAB */}
-      {tab === "users" && (
+      {tab==="users" && (
         <div className="card">
-          {loading ? <div className="p-8 text-center text-gray-400 text-sm">Loading...</div>
-            : users.length === 0 ? <div className="p-8 text-center text-gray-400 text-sm">No users yet.</div>
+          {loadingUsers ? <div className="p-8 text-center text-gray-400 text-sm">Loading users...</div>
+            : users.length===0 ? <div className="p-8 text-center text-gray-400 text-sm">No users yet.</div>
             : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -190,37 +204,37 @@ export default function AdminPage() {
                   <tbody>
                     {users.map(u => (
                       <tr key={u.id} className="border-b border-gray-50 hover:bg-gray-50">
-                        <td className="px-4 py-3 font-medium text-gray-900">{u.name || "—"}</td>
+                        <td className="px-4 py-3 font-medium text-gray-900">{u.name||"—"}</td>
                         <td className="px-4 py-3 text-gray-500 text-xs">{u.email}</td>
-                        <td className="px-4 py-3 text-gray-600 text-xs">{u.salesperson || "—"}</td>
+                        <td className="px-4 py-3 text-gray-600 text-xs">{u.salesperson||"—"}</td>
                         <td className="px-4 py-3 text-xs">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${u.role === "admin" ? "bg-purple-100 text-purple-700" : "bg-blue-50 text-blue-600"}`}>
-                            {u.role || "salesperson"}
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${u.role==="admin"?"bg-purple-100 text-purple-700":"bg-blue-50 text-blue-600"}`}>
+                            {u.role||"salesperson"}
                           </span>
                         </td>
                         <td className="px-4 py-3">
-                          <span className={`badge ${STATUS_BADGE[u.status] || "bg-gray-100 text-gray-600"}`}>{u.status}</span>
+                          <span className={`badge ${STATUS_BADGE[u.status]||"bg-gray-100 text-gray-600"}`}>{u.status}</span>
                         </td>
                         <td className="px-4 py-3">
-                          {editingUser === u.id ? (
+                          {editingUser===u.id ? (
                             <div className="flex gap-1 flex-wrap items-center">
-                              <select className="input text-xs py-0.5 w-28" value={editSP} onChange={e => setEditSP(e.target.value)}>
+                              <select className="input text-xs py-0.5 w-28" value={editSP} onChange={e=>setEditSP(e.target.value)}>
                                 <option value="Unassigned">Unassigned</option>
-                                {salespersons.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                                {salespersons.map(s=><option key={s.id} value={s.name}>{s.name}</option>)}
                               </select>
-                              <select className="input text-xs py-0.5 w-24" value={editRole} onChange={e => setEditRole(e.target.value)}>
+                              <select className="input text-xs py-0.5 w-24" value={editRole} onChange={e=>setEditRole(e.target.value)}>
                                 <option value="salesperson">SP</option>
                                 <option value="admin">Admin</option>
                               </select>
-                              <button onClick={() => saveUserEdit(u.id)} className="text-xs text-green-600 hover:underline">Save</button>
-                              <button onClick={() => setEditingUser(null)} className="text-xs text-gray-400 hover:underline">Cancel</button>
+                              <button onClick={()=>saveUserEdit(u.id)} className="text-xs text-green-600 hover:underline">Save</button>
+                              <button onClick={()=>setEditingUser(null)} className="text-xs text-gray-400 hover:underline">Cancel</button>
                             </div>
                           ) : (
                             <div className="flex gap-2 justify-end">
-                              <button onClick={() => { setEditingUser(u.id); setEditSP(u.salesperson || "Unassigned"); setEditRole(u.role || "salesperson"); }}
+                              <button onClick={()=>{setEditingUser(u.id);setEditSP(u.salesperson||"Unassigned");setEditRole(u.role||"salesperson");}}
                                 className="text-xs text-blue-500 hover:underline">Edit</button>
-                              {u.status !== "approved" && <button onClick={() => approve(u.id)} className="text-xs text-green-600 hover:underline">Approve</button>}
-                              {u.status !== "rejected" && <button onClick={() => reject(u.id)} className="text-xs text-red-500 hover:underline">Reject</button>}
+                              {u.status!=="approved"&&<button onClick={()=>approve(u.id)} className="text-xs text-green-600 hover:underline">Approve</button>}
+                              {u.status!=="rejected"&&<button onClick={()=>reject(u.id)} className="text-xs text-red-500 hover:underline">Reject</button>}
                             </div>
                           )}
                         </td>
@@ -234,63 +248,71 @@ export default function AdminPage() {
       )}
 
       {/* PRE-APPROVE TAB */}
-      {tab === "preapprove" && (
+      {tab==="preapprove" && (
         <div className="card p-5">
           <p className="text-sm font-semibold text-gray-800 mb-1">Pre-approve a user by email</p>
-          <p className="text-xs text-gray-400 mb-4">Add their Gmail before they sign in. They'll be auto-approved and assigned when they log in.</p>
+          <p className="text-xs text-gray-400 mb-4">Add their Gmail before they sign in. They'll be auto-approved and assigned when they first log in.</p>
           <div className="space-y-3">
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Gmail address *</label>
               <input className="input" type="email" placeholder="salesperson@gmail.com"
-                value={manualEmail} onChange={e => setManualEmail(e.target.value)} />
+                value={manualEmail} onChange={e=>setManualEmail(e.target.value)} />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Display name (optional)</label>
               <input className="input" placeholder="Pankaj Shah"
-                value={manualName} onChange={e => setManualName(e.target.value)} />
+                value={manualName} onChange={e=>setManualName(e.target.value)} />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Assign salesperson</label>
-              <select className="input" value={manualSP} onChange={e => setManualSP(e.target.value)}>
-                <option value="Unassigned">Unassigned</option>
-                {salespersons.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-              </select>
+              {loadingSP ? (
+                <div className="input text-gray-400 text-sm">Loading salespersons...</div>
+              ) : (
+                <select className="input" value={manualSP} onChange={e=>setManualSP(e.target.value)}>
+                  <option value="Unassigned">Unassigned</option>
+                  {salespersons.map(s=><option key={s.id} value={s.name}>{s.name}</option>)}
+                </select>
+              )}
+              {!loadingSP && salespersons.length===0 && (
+                <p className="text-xs text-amber-600 mt-1">⚠️ No salespersons added yet. Go to the Salespersons tab first.</p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Role</label>
               <div className="flex gap-2">
-                {[["salesperson","Salesperson (own leads only)"],["admin","Admin (sees all data)"]].map(([r, l]) => (
-                  <button key={r} onClick={() => setManualRole(r)}
-                    className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-all ${manualRole === r ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-600 border-gray-200"}`}>
+                {[["salesperson","Salesperson (own leads only)"],["admin","Admin (sees all data)"]].map(([r,l])=>(
+                  <button key={r} onClick={()=>setManualRole(r)}
+                    className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-all ${manualRole===r?"bg-blue-600 text-white border-blue-600":"bg-white text-gray-600 border-gray-200"}`}>
                     {l}
                   </button>
                 ))}
               </div>
             </div>
             <button className="btn btn-primary w-full" onClick={addManualUser} disabled={addingManual}>
-              {addingManual ? "Adding..." : "Pre-approve this user"}
+              {addingManual?"Adding...":"Pre-approve this user"}
             </button>
           </div>
         </div>
       )}
 
       {/* SALESPERSONS TAB */}
-      {tab === "salespersons" && (
+      {tab==="salespersons" && (
         <div>
           <div className="card p-4 mb-4">
             <p className="text-sm font-medium text-gray-700 mb-3">Add salesperson</p>
             <div className="space-y-2">
               <input className="input" placeholder="Full name *" value={newSPName}
-                onChange={e => setNewSPName(e.target.value)} />
+                onChange={e=>setNewSPName(e.target.value)} />
               <input className="input" placeholder="Email (optional — for auto-login matching)" value={newSPEmail}
-                onChange={e => setNewSPEmail(e.target.value)} />
+                onChange={e=>setNewSPEmail(e.target.value)} />
               <button className="btn btn-primary w-full" onClick={handleAddSP} disabled={addingSP}>
-                {addingSP ? "Adding..." : "Add salesperson"}
+                {addingSP?"Adding...":"Add salesperson"}
               </button>
             </div>
           </div>
           <div className="card">
-            {salespersons.length === 0
+            {loadingSP ? <div className="p-8 text-center text-gray-400 text-sm">Loading...</div>
+              : salespersons.length===0
               ? <div className="p-8 text-center text-gray-400 text-sm">No salespersons yet.</div>
               : (
                 <table className="w-full text-sm">
@@ -301,13 +323,13 @@ export default function AdminPage() {
                     <th className="px-4 py-3"></th>
                   </tr></thead>
                   <tbody>
-                    {salespersons.map((s, i) => (
+                    {salespersons.map((s,i)=>(
                       <tr key={s.id} className="border-b border-gray-50 hover:bg-gray-50">
-                        <td className="px-4 py-3 text-gray-400 text-xs">{i + 1}</td>
+                        <td className="px-4 py-3 text-gray-400 text-xs">{i+1}</td>
                         <td className="px-4 py-3 font-medium text-gray-900">{s.name}</td>
-                        <td className="px-4 py-3 text-gray-500 text-xs">{s.email || "—"}</td>
+                        <td className="px-4 py-3 text-gray-500 text-xs">{s.email||"—"}</td>
                         <td className="px-4 py-3 text-right">
-                          <button onClick={() => handleRemoveSP(s)} className="text-xs text-red-400 hover:text-red-600 hover:bg-red-50 px-2 py-1 rounded">Remove</button>
+                          <button onClick={()=>handleRemoveSP(s)} className="text-xs text-red-400 hover:text-red-600 hover:bg-red-50 px-2 py-1 rounded">Remove</button>
                         </td>
                       </tr>
                     ))}
@@ -316,7 +338,7 @@ export default function AdminPage() {
               )}
           </div>
           <p className="text-xs text-gray-400 mt-3 p-3 bg-amber-50 border border-amber-100 rounded-lg">
-            💡 Add the salesperson's Gmail here so they're auto-matched when they sign in, or use Pre-approve by Email tab to assign them before they log in.
+            💡 Add the salesperson's Gmail so they're auto-matched when they sign in, or use Pre-approve tab to assign them before they log in.
           </p>
         </div>
       )}
