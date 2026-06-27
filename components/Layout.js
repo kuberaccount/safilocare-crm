@@ -46,13 +46,13 @@ export default function Layout({ user, userData, active, onNav, isAdmin, childre
 
         <div className="p-3 border-t border-gray-100">
           <div className="flex items-center gap-2 px-2 py-1.5">
-            {user.photoURL
-              ? <img src={user.photoURL} alt="" className="w-7 h-7 rounded-full"/>
-              : <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center text-xs font-semibold text-blue-700">{user.displayName?.charAt(0)||"?"}</div>
+            {user?.photoURL
+              ? <img src={user?.photoURL} alt="" className="w-7 h-7 rounded-full"/>
+              : <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center text-xs font-semibold text-blue-700">{user?.displayName?.charAt(0)||"?"}</div>
             }
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-gray-900 truncate">{user.displayName||"User"}</p>
-              <p className="text-xs text-gray-400 truncate">{user.email||""}</p>
+              <p className="text-xs font-medium text-gray-900 truncate">{user?.displayName||"User"}</p>
+              <p className="text-xs text-gray-400 truncate">{user?.email||""}</p>
             </div>
             <button onClick={() => signOut(auth)} title="Sign out" className="text-gray-400 hover:text-gray-600">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
