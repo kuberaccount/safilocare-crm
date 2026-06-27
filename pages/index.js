@@ -1,23 +1,36 @@
 import { useEffect, useState } from "react";
-import { auth, googleProvider } from "../lib/firebase";
-import { signInWithPopup, onAuthStateChanged } from "firebase/auth";
+import { auth, googleProvider, requestAccess, getUserStatus } from "../lib/firebase";
+import { signInWithPopup, onAuthStateChanged, signOut } from "firebase/auth";
 import Dashboard from "./dashboard";
 
 export default function Home() {
   const [user, setUser] = useState(null);
+  const [status, setStatus] = useState(null); // pending | approved | rejected
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u);
+    const unsub = onAuthStateChanged(auth, async (u) => {
+      if (u) {
+        setUser(u);
+        const data = await requestAccess(u);
+        setStatus(data.status);
+      } else {
+        setUser(null);
+        setStatus(null);
+      }
       setLoading(false);
     });
     return () => unsub();
   }, []);
 
   const signIn = async () => {
-    try { await signInWithPopup(auth, googleProvider); }
-    catch (e) { console.error(e); }
+    try {
+      setLoading(true);
+      const result = await signInWithPopup(auth, googleProvider);
+      const data = await requestAccess(result.user);
+      setStatus(data.status);
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
   };
 
   if (loading) return (
@@ -26,7 +39,15 @@ export default function Home() {
     </div>
   );
 
-  if (!user) return (
+  if (!user) return <LoginPage onSignIn={signIn} />;
+  if (status === "pending") return <PendingPage user={user} />;
+  if (status === "rejected") return <RejectedPage user={user} />;
+  if (status === "approved") return <Dashboard user={user} />;
+  return <LoginPage onSignIn={signIn} />;
+}
+
+function LoginPage({ onSignIn }) {
+  return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
       <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-10 w-full max-w-sm text-center">
         <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
@@ -35,8 +56,8 @@ export default function Home() {
           </svg>
         </div>
         <h1 className="text-2xl font-bold text-gray-900 mb-1">Safilocare CRM</h1>
-        <p className="text-gray-500 text-sm mb-8">Manage your B2B leads and pipeline</p>
-        <button onClick={signIn} className="w-full flex items-center justify-center gap-3 bg-white border border-gray-200 rounded-xl py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-all shadow-sm">
+        <p className="text-gray-500 text-sm mb-8">Sign in to manage your B2B leads</p>
+        <button onClick={onSignIn} className="w-full flex items-center justify-center gap-3 bg-white border border-gray-200 rounded-xl py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-all shadow-sm">
           <svg className="w-5 h-5" viewBox="0 0 24 24">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
             <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
@@ -45,10 +66,43 @@ export default function Home() {
           </svg>
           Continue with Google
         </button>
-        <p className="text-xs text-gray-400 mt-4">Only your team members can log in</p>
+        <p className="text-xs text-gray-400 mt-4">Access requires admin approval</p>
       </div>
     </div>
   );
+}
 
-  return <Dashboard user={user} />;
+function PendingPage({ user }) {
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-10 w-full max-w-sm text-center">
+        <div className="w-14 h-14 bg-amber-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
+          <svg className="w-7 h-7 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <h2 className="text-xl font-bold text-gray-900 mb-2">Access Pending</h2>
+        <p className="text-gray-500 text-sm mb-2">Hi <strong>{user.displayName}</strong>,</p>
+        <p className="text-gray-500 text-sm mb-6">Your request to access Safilocare CRM has been sent. An admin will approve your account shortly.</p>
+        <button onClick={() => signOut(auth)} className="text-sm text-gray-400 hover:text-gray-600">Sign out</button>
+      </div>
+    </div>
+  );
+}
+
+function RejectedPage({ user }) {
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-10 w-full max-w-sm text-center">
+        <div className="w-14 h-14 bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
+          <svg className="w-7 h-7 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+          </svg>
+        </div>
+        <h2 className="text-xl font-bold text-gray-900 mb-2">Access Denied</h2>
+        <p className="text-gray-500 text-sm mb-6">Your account ({user.email}) was not approved. Please contact your admin.</p>
+        <button onClick={() => signOut(auth)} className="text-sm text-gray-400 hover:text-gray-600">Sign out</button>
+      </div>
+    </div>
+  );
 }
