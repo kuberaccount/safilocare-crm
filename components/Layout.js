@@ -1,5 +1,6 @@
 import { auth } from "../lib/firebase";
 import { signOut } from "firebase/auth";
+import Notifications from "./Notifications";
 
 const NAV_ALL = [
   { key:"dashboard", label:"Dashboard", icon:"M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
@@ -11,7 +12,6 @@ const NAV_ALL = [
 ];
 
 export default function Layout({ user, userData, active, onNav, isAdmin, children }) {
-  // SSR guard — during prerender user is undefined
   if (!user) return <div className="flex h-screen bg-gray-50">{children}</div>;
 
   const NAV = NAV_ALL.filter(n => !n.adminOnly || isAdmin);
@@ -59,6 +59,7 @@ export default function Layout({ user, userData, active, onNav, isAdmin, childre
               <p className="text-xs font-medium text-gray-900 truncate">{displayName}</p>
               <p className="text-xs text-gray-400 truncate">{email}</p>
             </div>
+            <Notifications currentUser={userData} />
             <button onClick={() => signOut(auth)} title="Sign out" className="text-gray-400 hover:text-gray-600">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
