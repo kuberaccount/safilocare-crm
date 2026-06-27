@@ -3,6 +3,7 @@ import { getDeals, addDeal, updateDeal, deleteDeal, addActivity, getActivitiesFo
 import { doc, updateDoc } from "firebase/firestore";
 import Modal from "../components/Modal";
 import toast from "react-hot-toast";
+import { exportToCSV, fmtDateForExport } from "../lib/export";
 
 const STAGES = ["Lead","Qualified","Proposal","Negotiation","Won","Lost"];
 const LEAD_STATUSES = ["Cold","Warm","Hot"];
@@ -37,11 +38,15 @@ export default function PipelinePage({ currentUser }) {
   const [contactResults, setContactResults] = useState([]);
   const [showContactDrop, setShowContactDrop] = useState(false);
   const [actModal, setActModal] = useState(null);
-  const [actForm, setActForm] = useState({ type:"Email", subject:"", notes:"" });
+  const [actForm, setActForm] = useState({ type:"Email", subject:"", notes:"", date: todayStr() });
   const [dealActivities, setDealActivities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const dragDeal = useRef(null);
+
+  function todayStr() {
+    return new Date().toISOString().split("T")[0];
+  }
 
   useEffect(() => { load(); }, []);
 
@@ -106,7 +111,7 @@ export default function PipelinePage({ currentUser }) {
 
   async function openActModal(deal) {
     setActModal(deal);
-    setActForm({ type:"Email", subject:"", notes:"" });
+    setActForm({ type:"Email", subject:"", notes:"", date: todayStr() });
     const acts = await getActivitiesForDeal(deal.id);
     setDealActivities(acts);
   }
@@ -121,7 +126,7 @@ export default function PipelinePage({ currentUser }) {
         salesperson: actModal.salesperson, dealSalesperson: actModal.salesperson
       });
       toast.success("Activity logged");
-      setActForm({ type:"Email", subject:"", notes:"" });
+      setActForm({ type:"Email", subject:"", notes:"", date: todayStr() });
       const acts = await getActivitiesForDeal(actModal.id);
       setDealActivities(acts);
     } catch { toast.error("Failed"); }
@@ -140,6 +145,28 @@ export default function PipelinePage({ currentUser }) {
     await updateDeal(dragDeal.current.id, { stage });
     toast.success(`Moved to ${stage}`);
     dragDeal.current = null; load();
+  }
+
+  function handleExport() {
+    if (filtered.length === 0) return toast.error("No deals to export");
+    try {
+      exportToCSV(`pipeline_${todayStr()}.csv`, filtered, [
+        { key: "title", label: "Deal title" },
+        { key: "contact", label: "Contact" },
+        { key: "phone", label: "Phone" },
+        { key: "company", label: "Company" },
+        { key: "value", label: "Value (₹)" },
+        { key: "stage", label: "Stage" },
+        { key: "leadStatus", label: "Lead status" },
+        { key: "partyType", label: "Party type" },
+        { key: "leadType", label: "Lead type" },
+        { key: "salesperson", label: "Salesperson" },
+        { key: "followUpDate", label: "Follow-up date" },
+        { key: "notes", label: "Notes" },
+        { key: "createdAt", label: "Created", value: (r) => fmtDateForExport(r.createdAt) },
+      ]);
+      toast.success("Exported");
+    } catch { toast.error("Export failed"); }
   }
 
   function timeAgo(ts) {
@@ -179,6 +206,10 @@ export default function PipelinePage({ currentUser }) {
             <option value="All">All status</option>
             {LEAD_STATUSES.map(s=><option key={s}>{s}</option>)}
           </select>
+          <button className="btn btn-secondary" onClick={handleExport}>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+            Export CSV
+          </button>
           <button className="btn btn-primary" onClick={openAdd}>
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>
             Add deal
@@ -378,6 +409,10 @@ export default function PipelinePage({ currentUser }) {
                 value={actForm.subject} onChange={e=>setActForm(f=>({...f,subject:e.target.value}))} />
             </div>
             <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Date</label>
+              <input className="input" type="date" value={actForm.date} onChange={e=>setActForm(f=>({...f,date:e.target.value}))} />
+            </div>
+            <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
               <textarea className="input resize-none" rows={2} placeholder="What was discussed?"
                 value={actForm.notes} onChange={e=>setActForm(f=>({...f,notes:e.target.value}))} />
@@ -392,6 +427,7 @@ export default function PipelinePage({ currentUser }) {
                   {dealActivities.map(a=>(
                     <div key={a.id} className="text-xs bg-gray-50 rounded p-2">
                       <span className="font-medium text-gray-700">{a.type}</span> · {a.subject}
+                      {a.date && <span className="text-gray-400 ml-2">📅 {a.date}</span>}
                       <span className="text-gray-400 ml-2">{timeAgo(a.createdAt)}</span>
                     </div>
                   ))}
