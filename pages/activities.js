@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { getActivities, addActivity, deleteActivity, getSalespersons } from "../lib/firebase";
+import { getActivities, addActivity,updateActivity, deleteActivity, getSalespersons } from "../lib/firebase";
 import Modal from "../components/Modal";
 import toast from "react-hot-toast";
 import { exportToCSV, fmtDateForExport } from "../lib/export";
@@ -29,6 +29,7 @@ export default function ActivitiesPage({ currentUser }) {
   const [filterSP, setFilterSP] = useState("All");
   const [filterType, setFilterType] = useState("All");
   const [showModal, setShowModal] = useState(false);
+  const [editActivity, setEditActivity] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ type: "Email", subject: "", contact: "", company: "", notes: "", date: todayStr() });
@@ -54,18 +55,41 @@ export default function ActivitiesPage({ currentUser }) {
     finally { setLoading(false); }
   }
 
-  async function save() {
-    if (!form.subject.trim()) return toast.error("Subject is required");
-    setSaving(true);
-    try {
+ async function save() {
+  if (!form.subject.trim()) {
+    return toast.error("Subject is required");
+  }
+
+  setSaving(true);
+
+  try {
+    if (editActivity) {
+      await updateActivity(editActivity.id, form);
+      toast.success("Activity updated");
+    } else {
       await addActivity(form);
       toast.success("Activity logged");
-      setShowModal(false);
-      setForm({ type: "Email", subject: "", contact: "", company: "", notes: "", date: todayStr() });
-      load();
-    } catch { toast.error("Failed to save"); }
-    finally { setSaving(false); }
+    }
+
+    setShowModal(false);
+    setEditActivity(null);
+
+    setForm({
+      type: "Email",
+      subject: "",
+      contact: "",
+      company: "",
+      notes: "",
+      date: todayStr()
+    });
+
+    load();
+  } catch {
+    toast.error("Failed to save");
+  } finally {
+    setSaving(false);
   }
+}
 
   async function remove(id) {
     if (!confirm("Delete this activity?")) return;
@@ -158,11 +182,49 @@ export default function ActivitiesPage({ currentUser }) {
                       {a.notes && <p className="text-xs text-gray-500 mt-1.5 bg-gray-50 rounded p-2">{a.notes}</p>}
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="text-xs text-gray-300">{timeAgo(a.createdAt)}</span>
-                      <button onClick={() => remove(a.id)} className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-400 transition-all">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
-                      </button>
-                    </div>
+  <span className="text-xs text-gray-300">
+    {timeAgo(a.createdAt)}
+  </span>
+
+  <button
+    onClick={() => {
+      setEditActivity(a);
+
+      setForm({
+        type: a.type || "Email",
+        subject: a.subject || "",
+        contact: a.contact || "",
+        company: a.company || "",
+        notes: a.notes || "",
+        date: a.date || todayStr()
+      });
+
+      setShowModal(true);
+    }}
+    className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-blue-500 transition-all"
+  >
+    ✏️
+  </button>
+
+  <button
+    onClick={() => remove(a.id)}
+    className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-400 transition-all"
+  >
+    <svg
+      className="w-4 h-4"
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M6 18L18 6M6 6l12 12"
+      />
+    </svg>
+  </button>
+</div>
                   </div>
                 </div>
               </div>
@@ -172,7 +234,13 @@ export default function ActivitiesPage({ currentUser }) {
       )}
 
       {showModal && (
-        <Modal title="Log activity" onClose={() => setShowModal(false)}>
+       <Modal
+  title={editActivity ? "Edit Activity" : "Log Activity"}
+  onClose={() => {
+    setShowModal(false);
+    setEditActivity(null);
+  }}
+>
           <div className="space-y-4">
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Type</label>
@@ -199,7 +267,17 @@ export default function ActivitiesPage({ currentUser }) {
             </div>
             <div className="flex gap-3 pt-2">
               <button className="btn btn-secondary flex-1" onClick={() => setShowModal(false)}>Cancel</button>
-              <button className="btn btn-primary flex-1" onClick={save} disabled={saving}>{saving ? "Saving..." : "Log activity"}</button>
+              <button
+  className="btn btn-primary flex-1"
+  onClick={save}
+  disabled={saving}
+>
+  {saving
+    ? "Saving..."
+    : editActivity
+    ? "Update Activity"
+    : "Log Activity"}
+</button>
             </div>
           </div>
         </Modal>
