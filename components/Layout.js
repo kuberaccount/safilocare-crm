@@ -63,56 +63,40 @@ export default function Layout({ user, userData, active, onNav, isAdmin, childre
         {/* Logo */}
 <div
   style={{
-    padding: "18px 16px 14px",
+    padding: "24px",
+    textAlign: "center",
     borderBottom: "1px solid rgba(255,255,255,0.06)"
   }}
 >
+  <img
+    src="/logo.png"
+    alt="Safilo"
+    style={{
+      width: "140px",
+      height: "auto",
+      marginBottom: "10px"
+    }}
+  />
+
   <div
     style={{
-      display: "flex",
-      alignItems: "center",
-      gap: "10px"
+      color: "#fff",
+      fontWeight: "700",
+      fontSize: "18px"
     }}
   >
-   <img
-      src="/logo.png"
-      alt="Logo"
-      style={{
-        width: "34px",
-        height: "34px",
-        borderRadius: "10px",
-        objectFit: "contain"
-      }}
-    />
+    Safilo Healthcare
+  </div>
 
-    <div>
-      <p
-        style={{
-          fontSize: "14px",
-          fontWeight: 700,
-          color: "#f1f5f9",
-          margin: 0,
-          letterSpacing: "-0.01em"
-        }}
-      >
-        Safilo Healthcare
-      </p>
-
-      <p
-        style={{
-          fontSize: "10px",
-          color: "#6366f1",
-          margin: 0,
-          fontWeight: 600,
-          letterSpacing: "0.05em"
-        }}
-      >
-        CRM
-      </p>
-    </div>
+  <div
+    style={{
+      color: "#6366f1",
+      fontSize: "12px"
+    }}
+  >
+    CRM Platform
   </div>
 </div>
-
         {/* Nav */}
         <nav style={{flex:1,padding:"12px 8px",overflowY:"auto"}}>
           <p style={{fontSize:"10px",color:"#334155",fontWeight:700,letterSpacing:"0.1em",padding:"4px 8px 10px",textTransform:"uppercase"}}>Menu</p>
