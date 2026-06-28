@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { getActivityLog } from "./activitylog";
+import { getActivityLog } from "../lib/activitylog";
 import { getAllUsers, getSalespersons } from "../lib/firebase";
 
 const ACTION_STYLE = {
