@@ -5,63 +5,82 @@ import PipelinePage from "./pipeline";
 import ActivitiesPage from "./activities";
 import ReportsPage from "./reports";
 import AdminPage from "./admin";
-import NotificationsPage from "./notifications";
+
 export default function Dashboard({ user, userData }) {
   const [page, setPage] = useState("dashboard");
-  if (!user) return null;
   const isAdmin = userData?.role === "admin";
+
   const pages = {
-    contacts: <ContactsPage currentUser={userData} />,
-    pipeline: <PipelinePage currentUser={userData} />,
+    contacts:   <ContactsPage currentUser={userData} />,
+    pipeline:   <PipelinePage currentUser={userData} />,
     activities: <ActivitiesPage currentUser={userData} />,
-    reports: <ReportsPage currentUser={userData} />,
-    notifications: <NotificationsPage currentUser={userData} />,
+    reports:    <ReportsPage currentUser={userData} />,
     ...(isAdmin ? { admin: <AdminPage /> } : {}),
   };
+
   return (
     <Layout user={user} userData={userData} active={page} onNav={setPage} isAdmin={isAdmin}>
-      {page === "dashboard" ? <DashboardHome onNav={setPage} user={user} userData={userData} /> : pages[page]}
+      {page === "dashboard" ? <DashboardHome onNav={setPage} user={user} userData={userData} isAdmin={isAdmin} /> : pages[page]}
     </Layout>
   );
 }
-function DashboardHome({ onNav, user, userData }) {
-  if (!user) return null;
-  const isAdmin = userData?.role === "admin";
-  const quickActions = [
-    { label:"Contacts", page:"contacts", icon:"M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z", color:"bg-blue-50 text-blue-600" },
-    { label:"Pipeline", page:"pipeline", icon:"M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z", color:"bg-amber-50 text-amber-600" },
-    { label:"Activities", page:"activities", icon:"M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2", color:"bg-green-50 text-green-600" },
-    { label:"Reports", page:"reports", icon:"M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z", color:"bg-purple-50 text-purple-600" },
-  ];
+
+const QUICK = [
+  { label:"Contacts", page:"contacts", emoji:"👥", desc:"Manage your B2B leads", grad:"linear-gradient(135deg,#6366f1,#8b5cf6)" },
+  { label:"Pipeline", page:"pipeline", emoji:"📊", desc:"Track deals & stages", grad:"linear-gradient(135deg,#f59e0b,#ef4444)" },
+  { label:"Activities", page:"activities", emoji:"📝", desc:"Emails, calls, meetings", grad:"linear-gradient(135deg,#10b981,#059669)" },
+  { label:"Reports", page:"reports", emoji:"📈", desc:"Analytics & insights", grad:"linear-gradient(135deg,#3b82f6,#6366f1)" },
+];
+
+function DashboardHome({ onNav, user, userData, isAdmin }) {
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-xl font-bold text-gray-900">Welcome, {user?.displayName?.split(" ")?.[0]} 👋</h1>
-        <p className="text-sm text-gray-500 mt-0.5">
-          {isAdmin ? "Admin — full access" : `Salesperson: ${userData?.salesperson || "Unassigned"}`}
+    <div style={{minHeight:"100%",background:"#f8fafc"}}>
+      {/* Hero banner */}
+      <div style={{background:"linear-gradient(135deg,#0f172a 0%,#1e1b4b 60%,#312e81 100%)",padding:"32px 28px 28px",position:"relative",overflow:"hidden"}}>
+        <div style={{position:"absolute",top:"-40px",right:"-40px",width:"200px",height:"200px",borderRadius:"50%",background:"rgba(99,102,241,0.15)"}}/>
+        <div style={{position:"absolute",bottom:"-20px",left:"30%",width:"120px",height:"120px",borderRadius:"50%",background:"rgba(139,92,246,0.1)"}}/>
+        <p style={{fontSize:"13px",color:"#a5b4fc",margin:"0 0 4px",fontWeight:500}}>{greeting} 👋</p>
+        <h1 style={{fontSize:"24px",fontWeight:800,color:"white",margin:"0 0 4px"}}>{user.displayName?.split(" ")[0] || "Welcome"}</h1>
+        <p style={{fontSize:"13px",color:"#94a3b8",margin:0}}>
+          {isAdmin ? "Admin — full access to all data" : `Salesperson · ${userData?.salesperson || "Unassigned"}`}
         </p>
       </div>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-        {quickActions.map(a=>(
-          <button key={a.page} onClick={()=>onNav(a.page)} className="card p-4 text-left hover:shadow-md transition-all">
-            <div className={`w-9 h-9 rounded-lg flex items-center justify-center mb-3 ${a.color}`}>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d={a.icon}/>
-              </svg>
+
+      <div style={{padding:"24px"}}>
+        <p style={{fontSize:"12px",fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.08em",margin:"0 0 14px"}}>Quick access</p>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:"12px",marginBottom:"20px"}}>
+          {QUICK.map(q=>(
+            <button key={q.page} onClick={()=>onNav(q.page)}
+              style={{background:"white",border:"1px solid #e2e8f0",borderRadius:"14px",padding:"16px",textAlign:"left",cursor:"pointer",transition:"all 0.2s",boxShadow:"0 1px 3px rgba(0,0,0,0.05)"}}
+              onMouseOver={e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 8px 24px rgba(0,0,0,0.1)";}}
+              onMouseOut={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow="0 1px 3px rgba(0,0,0,0.05)";}}>
+              <div style={{width:"38px",height:"38px",borderRadius:"10px",background:q.grad,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"18px",marginBottom:"10px"}}>
+                {q.emoji}
+              </div>
+              <p style={{fontSize:"14px",fontWeight:700,color:"#0f172a",margin:"0 0 2px"}}>{q.label}</p>
+              <p style={{fontSize:"12px",color:"#94a3b8",margin:0}}>{q.desc}</p>
+            </button>
+          ))}
+        </div>
+
+        {isAdmin && (
+          <button onClick={()=>onNav("admin")}
+            style={{width:"100%",background:"linear-gradient(135deg,#0f172a,#1e1b4b)",border:"none",borderRadius:"14px",padding:"16px 20px",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:"14px",transition:"all 0.2s"}}
+            onMouseOver={e=>e.currentTarget.style.opacity="0.9"} onMouseOut={e=>e.currentTarget.style.opacity="1"}>
+            <div style={{width:"38px",height:"38px",borderRadius:"10px",background:"rgba(99,102,241,0.3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"20px",flexShrink:0}}>⚙️</div>
+            <div>
+              <p style={{fontSize:"14px",fontWeight:700,color:"white",margin:"0 0 2px"}}>Admin Panel</p>
+              <p style={{fontSize:"12px",color:"#94a3b8",margin:0}}>Approve users, manage salespersons, pre-approve by email</p>
             </div>
-            <p className="text-sm font-medium text-gray-800">{a.label}</p>
+            <svg style={{marginLeft:"auto",flexShrink:0}} width="16" height="16" fill="none" stroke="#6366f1" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/>
+            </svg>
           </button>
-        ))}
+        )}
       </div>
-      {isAdmin && (
-        <button onClick={()=>onNav("admin")} className="card p-4 w-full text-left hover:shadow-md transition-all flex items-center gap-3 border-blue-100">
-          <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">⚙️</div>
-          <div>
-            <p className="text-sm font-medium text-gray-800">Admin Panel</p>
-            <p className="text-xs text-gray-400">Manage users, approvals, salespersons</p>
-          </div>
-        </button>
-      )}
     </div>
   );
 }
