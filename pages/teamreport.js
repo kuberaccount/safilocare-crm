@@ -2,6 +2,55 @@ import { useState, useEffect } from "react";
 import { getActivityLog } from "../lib/activitylog";
 import { getAllUsers, getSalespersons } from "../lib/firebase";
 
+function exportToExcel(logs, summary) {
+  // Build activity log sheet data
+  const logRows = [
+    ["Time", "User", "Salesperson", "Action", "Contact/Deal", "Details"],
+    ...logs.map(l => [
+      l.timestamp?.toDate ? l.timestamp.toDate().toLocaleString("en-IN") : "—",
+      l.userName || "—",
+      l.salesperson || "—",
+      l.action || "—",
+      l.details?.contactName || l.details?.dealTitle || "—",
+      [
+        l.details?.activityType,
+        l.details?.stage ? `Stage: ${l.details.stage}` : null,
+        l.details?.followUpDate ? `Follow-up: ${l.details.followUpDate}` : null,
+        l.details?.subject ? `"${l.details.subject}"` : null,
+      ].filter(Boolean).join(" · ") || "—"
+    ])
+  ];
+
+  // Build summary sheet data
+  const summaryRows = [
+    ["Salesperson", "Total Actions", "Contacts Added", "Leads Added", "Lead Updates", "Activities", "Follow-ups", "Stage Moves", "Deals Won", "Last Active"],
+    ...summary.map(sp => [
+      sp.sp,
+      sp.total,
+      sp.contacts,
+      sp.leads,
+      sp.updates,
+      sp.activities,
+      sp.followups,
+      sp.moved,
+      sp.won,
+      sp.lastActive?.toDate ? sp.lastActive.toDate().toLocaleString("en-IN") : "—"
+    ])
+  ];
+
+  // Convert to CSV with sheet separator
+  function toCSV(rows) {
+    return rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
+  }
+
+  const csvContent = "ACTIVITY LOG\n" + toCSV(logRows) + "\n\nSUMMARY BY PERSON\n" + toCSV(summaryRows);
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `safilocare-team-report-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
 const ACTION_STYLE = {
   "Added Contact":    { bg:"#dbeafe", color:"#1e40af", icon:"👤" },
   "Added Lead":       { bg:"#ede9fe", color:"#5b21b6", icon:"📋" },
@@ -109,7 +158,18 @@ export default function TeamReportPage() {
           <h1 className="text-xl font-bold text-gray-900">Team Activity Report</h1>
           <p className="text-sm text-gray-500">Full history of what your team did and when</p>
         </div>
-        <span style={{fontSize:"11px",background:"#fee2e2",color:"#b91c1c",padding:"4px 10px",borderRadius:"20px",fontWeight:700}}>🔒 Admin only</span>
+        <div style={{display:"flex",gap:"8px",alignItems:"center"}}>
+          <button onClick={()=>exportToExcel(filtered, summary)}
+            style={{display:"inline-flex",alignItems:"center",gap:"6px",padding:"7px 14px",borderRadius:"8px",border:"1px solid #16a34a",background:"#f0fdf4",color:"#16a34a",fontSize:"13px",fontWeight:600,cursor:"pointer",transition:"all 0.15s"}}
+            onMouseOver={e=>{e.currentTarget.style.background="#16a34a";e.currentTarget.style.color="white";}}
+            onMouseOut={e=>{e.currentTarget.style.background="#f0fdf4";e.currentTarget.style.color="#16a34a";}}>
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+            </svg>
+            Export Excel
+          </button>
+          <span style={{fontSize:"11px",background:"#fee2e2",color:"#b91c1c",padding:"4px 10px",borderRadius:"20px",fontWeight:700}}>🔒 Admin only</span>
+        </div>
       </div>
 
       {/* Date filter */}
