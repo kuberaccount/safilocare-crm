@@ -79,7 +79,9 @@ export default function Layout({ user, userData, active, onNav, isAdmin, childre
             return (
               <button key={n.key} onClick={() => onNav(n.key)}
                 className="sidebar-link w-full text-left"
-                style={isActive ? {background:"rgba(99,102,241,0.2)",color:"#a5b4fc",borderLeft:"3px solid #6366f1",paddingLeft:"9px",borderRadius:"0 8px 8px 0"} : {}}>
+                style={isActive
+                  ? {background:"rgba(99,102,241,0.2)",color:"#a5b4fc",borderLeft:"3px solid #6366f1",paddingLeft:"9px",borderRadius:"0 8px 8px 0",fontWeight:700}
+                  : {color:"#e2e8f0",fontWeight:600}}>
                 <span style={{opacity:isActive?1:0.65}}>{n.icon}</span>
                 {n.label}
                 {n.key==="admin" && <span style={{marginLeft:"auto",fontSize:"10px",background:"rgba(239,68,68,0.2)",color:"#fca5a5",padding:"1px 6px",borderRadius:"20px"}}>⚙</span>}
