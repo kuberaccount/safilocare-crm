@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { logAction } from "./activitylog";
+import { logAction } from "../lib/activitylog";
 import { getDeals, addDeal, updateDeal, deleteDeal, addActivity, getActivitiesForDeal, getSalespersons, getContacts } from "../lib/firebase";
 import Modal from "../components/Modal";
 import toast from "react-hot-toast";
