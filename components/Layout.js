@@ -62,10 +62,11 @@ export default function Layout({ user, userData, active, onNav, isAdmin, childre
       <aside style={{width:"220px",flexShrink:0,display:"flex",flexDirection:"column",background:"linear-gradient(180deg,#0f172a 0%,#1e1b4b 100%)",borderRight:"1px solid rgba(255,255,255,0.06)"}}>
 
         {/* Logo */}
-       <div style={{padding:"18px 16px 14px",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
+        <div style={{padding:"18px 16px 14px",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
           <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
             <div style={{background:"white",borderRadius:"10px",padding:"6px 10px",display:"inline-flex",alignItems:"center",boxShadow:"0 2px 8px rgba(0,0,0,0.2)"}}>
               <img src="/logo.png" alt="Safilocare" style={{width:"150px",height:"52px",objectFit:"contain",objectPosition:"left center"}} onError={e=>{e.target.parentElement.style.display="none";}} />
+            </div>
 
           </div>
         </div>
