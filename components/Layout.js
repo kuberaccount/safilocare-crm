@@ -63,6 +63,7 @@ export default function Layout({ user, userData, active, onNav, isAdmin, childre
         {/* Logo */}
 <div
   style={{
+    background: "#ffffff",
     padding: "24px",
     textAlign: "center",
     borderBottom: "1px solid rgba(0,0,0,0.08)"
