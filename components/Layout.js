@@ -73,7 +73,6 @@ export default function Layout({ user, userData, active, onNav, isAdmin, childre
     style={{
       width: "160px",
       height: "auto"
-      marginBottom: "10px"
     }}
   />
 
