@@ -338,6 +338,18 @@ export default function PipelinePage({ currentUser }) {
                             <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
                             Activity
                           </button>
+                          {/* Call button */}
+                          {deal.phone && (
+                            <a href={`tel:${deal.phone.replace(/\D/g,"")}`}
+                              title={`Call ${deal.contact} — ${deal.phone}`}
+                              style={{padding:"4px 6px",borderRadius:"6px",border:"none",background:(() => { const d=deal.followUpDate; if(!d) return "#f8fafc"; const fd=d.includes("-")&&d.split("-")[0].length===2?new Date(`${d.split("-")[2]}-${d.split("-")[1]}-${d.split("-")[0]}`):new Date(d); const today=new Date(new Date().toDateString()); const tom=new Date(today); tom.setDate(today.getDate()+1); if(fd<today) return "#fee2e2"; if(fd>=today&&fd<tom) return "#dcfce7"; return "#f8fafc"; })(),color:(() => { const d=deal.followUpDate; if(!d) return "#94a3b8"; const fd=d.includes("-")&&d.split("-")[0].length===2?new Date(`${d.split("-")[2]}-${d.split("-")[1]}-${d.split("-")[0]}`):new Date(d); const today=new Date(new Date().toDateString()); const tom=new Date(today); tom.setDate(today.getDate()+1); if(fd<today) return "#dc2626"; if(fd>=today&&fd<tom) return "#16a34a"; return "#94a3b8"; })(),cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",textDecoration:"none",transition:"all 0.15s"}}
+                              onMouseOver={e=>{e.currentTarget.style.background="#dbeafe";e.currentTarget.style.color="#2563eb";}} 
+                              onMouseOut={e=>{e.currentTarget.style.background=(() => { const d=deal.followUpDate; if(!d) return "#f8fafc"; const fd=d.includes("-")&&d.split("-")[0].length===2?new Date(`${d.split("-")[2]}-${d.split("-")[1]}-${d.split("-")[0]}`):new Date(d); const today=new Date(new Date().toDateString()); const tom=new Date(today); tom.setDate(today.getDate()+1); if(fd<today) return "#fee2e2"; if(fd>=today&&fd<tom) return "#dcfce7"; return "#f8fafc"; })();e.currentTarget.style.color=(() => { const d=deal.followUpDate; if(!d) return "#94a3b8"; const fd=d.includes("-")&&d.split("-")[0].length===2?new Date(`${d.split("-")[2]}-${d.split("-")[1]}-${d.split("-")[0]}`):new Date(d); const today=new Date(new Date().toDateString()); const tom=new Date(today); tom.setDate(today.getDate()+1); if(fd<today) return "#dc2626"; if(fd>=today&&fd<tom) return "#16a34a"; return "#94a3b8"; })();}}>
+                              <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
+                              </svg>
+                            </a>
+                          )}
                           {/* WhatsApp button */}
                           {deal.phone && (
                             <a href={`https://wa.me/91${deal.phone.replace(/\D/g,"")}`} target="_blank" rel="noreferrer"
