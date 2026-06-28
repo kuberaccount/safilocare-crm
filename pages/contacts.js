@@ -1,7 +1,14 @@
 export const dynamic = "force-dynamic";
 
 import { useState, useEffect } from "react";
-import { getContacts, addContact, updateContact, deleteContact, getSalespersons, addSalesperson, deleteSalesperson } from "../lib/firebase";
+import { getContacts,
+  addContact,
+  updateContact,
+  deleteContact,
+  getSalespersons,
+  addSalesperson,
+  deleteSalesperson,
+  checkDuplicatePhone } from "../lib/firebase";
 import { logAction } from "../lib/activitylog";
 import Modal from "../components/Modal";
 import toast from "react-hot-toast";
@@ -37,41 +44,83 @@ export default function ContactsPage({ currentUser }) {
   useEffect(() => { load(); }, []);
 
   async function load() {
-    setLoading(true);
-    try {
-      const sp = currentUser?.role !== "admin" ? currentUser?.salesperson : null;
-      const [c, s] = await Promise.all([getContacts(sp), getSalespersons()]);
-      setContacts(c); setSalespersons(s);
-    } catch(e) { toast.error("Could not load contacts"); }
-    finally { setLoading(false); }
+  setLoading(true);
+
+  try {
+    const [c, s] = await Promise.all([
+      getContacts(),
+      getSalespersons()
+    ]);
+
+    setContacts(c);
+    setSalespersons(s);
+  } catch (e) {
+    toast.error("Could not load contacts");
+  } finally {
+    setLoading(false);
   }
+}
 
   function openAdd() { setForm(EMPTY_FORM); setEditContact(null); setShowModal(true); }
   function openEdit(c) { setForm({...EMPTY_FORM,...c}); setEditContact(c); setShowModal(true); }
 
   async function save() {
-    if (!form.name.trim()) return toast.error("Name is required");
-    setSaving(true);
-    try {
-      if (editContact) {
-        await updateContact(editContact.id, form);
-        // Safe logAction — won't break save if it fails
-        try { await logAction(currentUser, "Updated Lead", { contactName: form.name, company: form.company }); } catch {}
-        toast.success("Contact updated ✅");
-      } else {
-        await addContact(form);
-        try { await logAction(currentUser, "Added Contact", { contactName: form.name, company: form.company }); } catch {}
-        toast.success("Contact added ✅");
-      }
-      setShowModal(false);
-      setForm(EMPTY_FORM);
-      load();
-    } catch(e) {
-      console.error("Save error:", e);
-      toast.error("Failed to save: " + (e.message || "unknown error"));
-    } finally { setSaving(false); }
+  if (!form.name.trim()) {
+    return toast.error("Name is required");
   }
 
+  const phone = (form.phone || "").trim();
+
+  if (phone) {
+    const exists = await checkDuplicatePhone(
+      phone,
+      editContact?.id || null
+    );
+
+    if (exists) {
+      toast.error("Phone number already added");
+      return;
+    }
+  }
+
+  setSaving(true);
+
+  try {
+    if (editContact) {
+      await updateContact(editContact.id, form);
+
+      try {
+        await logAction(currentUser, "Updated Lead", {
+          contactName: form.name,
+          company: form.company
+        });
+      } catch {}
+
+      toast.success("Contact updated ✅");
+    } else {
+      await addContact(form);
+
+      try {
+        await logAction(currentUser, "Added Contact", {
+          contactName: form.name,
+          company: form.company
+        });
+      } catch {}
+
+      toast.success("Contact added ✅");
+    }
+
+    setShowModal(false);
+    setForm(EMPTY_FORM);
+    load();
+
+  } catch (e) {
+    console.error(e);
+    toast.error("Failed to save");
+  } finally {
+    setSaving(false);
+  }
+}
   async function archive(contact) {
     try {
       await updateContact(contact.id, { archived: !contact.archived });
