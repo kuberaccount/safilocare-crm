@@ -62,9 +62,8 @@ export default function Layout({ user, userData, active, onNav, isAdmin, childre
 
         {/* Logo */}
         <div style={{padding:"18px 16px 14px",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
-          <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
-            { <img src="/logo.png" style={{width:"34px",height:"34px",borderRadius:"10px",objectFit:"contain"}} /> once you upload your logo */}
-            <div style={{width:"34px",height:"34px",borderRadius:"10px",flexShrink:0,background:"linear-gradient(135deg,#6366f1,#8b5cf6)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 12px rgba(99,102,241,0.4)"}}>
+          <div style={{display:"flex",alignItems:"center",gap:"10px"}}
+            <img src="/logo.png" style={{width:"34px",height:"34px",borderRadius:"10px",objectFit:"contain"}} />
               <svg width="18" height="18" fill="none" stroke="white" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16"/>
               </svg>
