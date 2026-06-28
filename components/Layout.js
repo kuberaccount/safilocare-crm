@@ -61,19 +61,57 @@ export default function Layout({ user, userData, active, onNav, isAdmin, childre
       <aside style={{width:"220px",flexShrink:0,display:"flex",flexDirection:"column",background:"linear-gradient(180deg,#0f172a 0%,#1e1b4b 100%)",borderRight:"1px solid rgba(255,255,255,0.06)"}}>
 
         {/* Logo */}
-        <div style={{padding:"18px 16px 14px",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
-          <div style={{display:"flex",alignItems:"center",gap:"10px"}}
-            <img src="/logo.png" style={{width:"34px",height:"34px",borderRadius:"10px",objectFit:"contain"}} />
-              <svg width="18" height="18" fill="none" stroke="white" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16"/>
-              </svg>
-            </div>
-            <div>
-              <p style={{fontSize:"14px",fontWeight:700,color:"#f1f5f9",margin:0,letterSpacing:"-0.01em"}}>Safilocare</p>
-              <p style={{fontSize:"10px",color:"#6366f1",margin:0,fontWeight:600,letterSpacing:"0.05em"}}>CRM PRO</p>
-            </div>
-          </div>
-        </div>
+<div
+  style={{
+    padding: "18px 16px 14px",
+    borderBottom: "1px solid rgba(255,255,255,0.06)"
+  }}
+>
+  <div
+    style={{
+      display: "flex",
+      alignItems: "center",
+      gap: "10px"
+    }}
+  >
+    <img
+      src="/logo.png"
+      alt="Logo"
+      style={{
+        width: "34px",
+        height: "34px",
+        borderRadius: "10px",
+        objectFit: "contain"
+      }}
+    />
+
+    <div>
+      <p
+        style={{
+          fontSize: "14px",
+          fontWeight: 700,
+          color: "#f1f5f9",
+          margin: 0,
+          letterSpacing: "-0.01em"
+        }}
+      >
+        Safilo Healthcare
+      </p>
+
+      <p
+        style={{
+          fontSize: "10px",
+          color: "#6366f1",
+          margin: 0,
+          fontWeight: 600,
+          letterSpacing: "0.05em"
+        }}
+      >
+        CRM
+      </p>
+    </div>
+  </div>
+</div>
 
         {/* Nav */}
         <nav style={{flex:1,padding:"12px 8px",overflowY:"auto"}}>
