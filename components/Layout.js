@@ -87,15 +87,6 @@ export default function Layout({ user, userData, active, onNav, isAdmin, childre
   >
     Safilo Healthcare
   </div>
-
-  <div
-    style={{
-      color: "#6366f1",
-      fontSize: "12px"
-    }}
-  >
-    CRM Platform
-  </div>
 </div>
         {/* Nav */}
         <nav style={{flex:1,padding:"12px 8px",overflowY:"auto"}}>
