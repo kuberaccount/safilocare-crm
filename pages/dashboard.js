@@ -5,6 +5,7 @@ import PipelinePage from "./pipeline";
 import ActivitiesPage from "./activities";
 import ReportsPage from "./reports";
 import AdminPage from "./admin";
+import TeamReportPage from "./teamreport";
 
 export default function Dashboard({ user, userData }) {
   const [page, setPage] = useState("dashboard");
@@ -18,7 +19,7 @@ export default function Dashboard({ user, userData }) {
     pipeline:   <PipelinePage currentUser={userData} />,
     activities: <ActivitiesPage currentUser={userData} />,
     reports:    <ReportsPage currentUser={userData} />,
-    ...(isAdmin ? { admin: <AdminPage /> } : {}),
+    ...(isAdmin ? { admin: <AdminPage />, teamreport: <TeamReportPage /> } : {}),
   };
 
   return (
