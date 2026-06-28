@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { logAction } from "./activitylog";
 import { getDeals, addDeal, updateDeal, deleteDeal, addActivity, getActivitiesForDeal, getSalespersons, getContacts } from "../lib/firebase";
 import Modal from "../components/Modal";
 import toast from "react-hot-toast";
@@ -101,8 +102,13 @@ export default function PipelinePage({ currentUser }) {
     if (!dealForm.contactId && !dealForm.contact) return toast.error("Please select a contact");
     setSaving(true);
     try {
-      if (editDeal) { await updateDeal(editDeal.id, dealForm); toast.success("Deal updated ✅"); }
-      else { await addDeal(dealForm); toast.success("Deal added ✅"); }
+      if (editDeal) { await updateDeal(editDeal.id, dealForm);
+      const action = dealForm.stage === "Won" ? "Won Deal" : dealForm.followUpDate !== editDeal.followUpDate ? "Marked Follow-up" : "Updated Lead";
+      await logAction(currentUser, action, { dealTitle: dealForm.title, stage: dealForm.stage, followUpDate: dealForm.followUpDate });
+      toast.success("Deal updated ✅"); }
+      else { await addDeal(dealForm);
+      await logAction(currentUser, "Added Lead", { dealTitle: dealForm.title, contact: dealForm.contact, company: dealForm.company });
+      toast.success("Deal added ✅"); }
       setShowDealModal(false); load();
     } catch { toast.error("Failed to save"); }
     finally { setSaving(false); }
@@ -119,6 +125,7 @@ export default function PipelinePage({ currentUser }) {
     try {
       await addActivity({ ...actForm, dealId:actModal.id, dealTitle:actModal.title, contact:actModal.contact, company:actModal.company, salesperson:actModal.salesperson });
       toast.success("Activity logged ✅");
+      await logAction(currentUser, "Logged Activity", { dealTitle: actModal.title, activityType: actForm.type, subject: actForm.subject });
       setActForm({ type:"Email", subject:"", notes:"", followUpDate:"" });
       // Update follow-up date on the deal if changed
       if (actForm.followUpDate && actForm.followUpDate !== actModal.followUpDate) {
@@ -131,7 +138,10 @@ export default function PipelinePage({ currentUser }) {
 
   async function remove(id) {
     if (!confirm("Delete this deal?")) return;
-    await deleteDeal(id); toast.success("Deleted");
+    const delDeal = deals.find(d=>d.id===id);
+    await deleteDeal(id);
+    await logAction(currentUser, "Deleted Lead", { dealTitle: delDeal?.title || id });
+    toast.success("Deleted");
     setDeals(d => d.filter(x => x.id !== id));
   }
 
@@ -139,6 +149,7 @@ export default function PipelinePage({ currentUser }) {
   async function onDrop(stage) {
     if (!dragDeal.current || dragDeal.current.stage === stage) { dragDeal.current=null; return; }
     await updateDeal(dragDeal.current.id, { stage });
+    await logAction(currentUser, stage === 'Won' ? 'Won Deal' : 'Moved Stage', { dealTitle: dragDeal.current.title, stage });
     toast.success(`Moved to ${stage} 📌`);
     dragDeal.current = null; load();
   }
