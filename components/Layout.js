@@ -74,7 +74,6 @@ export default function Layout({ user, userData, active, onNav, isAdmin, childre
       gap: "10px"
     }}
   >
-  import Image from "next/image";
    <img
       src="/logo.png"
       alt="Logo"
