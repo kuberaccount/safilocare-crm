@@ -89,21 +89,69 @@ export default function Layout({ user, userData, active, onNav, isAdmin, childre
 </div>
         {/* Nav */}
         <nav style={{flex:1,padding:"12px 8px",overflowY:"auto"}}>
-          <p style={{fontSize:"10px",color:"#334155",fontWeight:700,letterSpacing:"0.1em",padding:"4px 8px 10px",textTransform:"uppercase"}}>Menu</p>
-          {NAV.map(n => {
-            const isActive = active === n.key;
-            return (
-              <button key={n.key} onClick={() => onNav(n.key)}
-                className="sidebar-link w-full text-left"
-                style={isActive ? {background:"rgba(99,102,241,0.2)",color:"#a5b4fc",borderLeft:"3px solid #6366f1",paddingLeft:"9px",borderRadius:"0 8px 8px 0"} : {}}>
-                <span style={{opacity:isActive?1:0.65}}>{n.icon}</span>
-                {n.label}
-                {n.key==="admin" && <span style={{marginLeft:"auto",fontSize:"10px",background:"rgba(239,68,68,0.2)",color:"#fca5a5",padding:"1px 6px",borderRadius:"20px"}}>⚙</span>}
-              </button>
-            );
-          })}
-        </nav>
+  <p
+    style={{
+      fontSize:"10px",
+      color:"#94A3B8",
+      fontWeight:700,
+      letterSpacing:"0.1em",
+      padding:"4px 8px 10px",
+      textTransform:"uppercase"
+    }}
+  >
+    Menu
+  </p>
 
+  {NAV.map(n => {
+    const isActive = active === n.key;
+
+    return (
+      <button
+        key={n.key}
+        onClick={() => onNav(n.key)}
+        className="sidebar-link w-full text-left"
+        style={{
+          color:"#FFFFFF",
+          fontWeight:700,
+          ...(isActive
+            ? {
+                background:"rgba(99,102,241,0.25)",
+                borderLeft:"4px solid #818CF8",
+                paddingLeft:"8px",
+                borderRadius:"0 10px 10px 0"
+              }
+            : {})
+        }}
+      >
+        <span
+          style={{
+            opacity:1,
+            color:"#FFFFFF"
+          }}
+        >
+          {n.icon}
+        </span>
+
+        {n.label}
+
+        {n.key==="admin" && (
+          <span
+            style={{
+              marginLeft:"auto",
+              fontSize:"10px",
+              background:"rgba(239,68,68,0.2)",
+              color:"#FCA5A5",
+              padding:"1px 6px",
+              borderRadius:"20px"
+            }}
+          >
+            ⚙
+          </span>
+        )}
+      </button>
+    );
+  })}
+</nav>
         {/* User footer */}
         <div style={{padding:"10px",borderTop:"1px solid rgba(255,255,255,0.06)"}}>
           <div style={{display:"flex",alignItems:"center",gap:"8px",padding:"8px 10px",borderRadius:"10px",background:"rgba(255,255,255,0.04)"}}>
