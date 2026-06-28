@@ -8,16 +8,17 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
 /* ── Sidebar nav links ─────────────────────────────────────── */
 .sidebar-link {
   @apply flex items-center gap-3 px-3 py-2.5 text-sm rounded-lg transition-all cursor-pointer;
-  color: #94a3b8;
+  color: #e2e8f0;
+  font-weight: 600;
 }
 .sidebar-link:hover {
-  background: rgba(255,255,255,0.07);
-  color: #f1f5f9;
+  background: rgba(255,255,255,0.09);
+  color: #ffffff;
 }
 .sidebar-link.active {
   background: rgba(99,102,241,0.25);
   color: #a5b4fc;
-  font-weight: 500;
+  font-weight: 700;
 }
 .sidebar-link.active svg {
   color: #818cf8;
