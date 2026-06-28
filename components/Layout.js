@@ -9,6 +9,7 @@ const NAV_ALL = [
   { key:"pipeline",   label:"Pipeline",   icon:<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg> },
   { key:"activities", label:"Activities", icon:<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg> },
   { key:"reports",    label:"Reports",    icon:<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"/></svg> },
+  { key:"teamreport", label:"Team Report", adminOnly:true, icon:<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg> },
   { key:"admin", label:"Admin", adminOnly:true, icon:<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg> },
 ];
 
@@ -61,97 +62,38 @@ export default function Layout({ user, userData, active, onNav, isAdmin, childre
       <aside style={{width:"220px",flexShrink:0,display:"flex",flexDirection:"column",background:"linear-gradient(180deg,#0f172a 0%,#1e1b4b 100%)",borderRight:"1px solid rgba(255,255,255,0.06)"}}>
 
         {/* Logo */}
-<div
-  style={{
-    background: "#ffffff",
-    padding: "24px",
-    textAlign: "center",
-    borderBottom: "1px solid rgba(0,0,0,0.08)"
-  }}
->
-  <img
-    src="/logo.png"
-    style={{
-      width: "160px",
-      height: "auto"
-    }}
-  />
+        <div style={{padding:"18px 16px 14px",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
+          <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
+            {/* LOGO: Replace the div below with <img src="/logo.png" style={{width:"34px",height:"34px",borderRadius:"10px",objectFit:"contain"}} /> once you upload your logo */}
+            <div style={{width:"34px",height:"34px",borderRadius:"10px",flexShrink:0,background:"linear-gradient(135deg,#6366f1,#8b5cf6)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 12px rgba(99,102,241,0.4)"}}>
+              <svg width="18" height="18" fill="none" stroke="white" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16"/>
+              </svg>
+            </div>
+            <div>
+              <p style={{fontSize:"14px",fontWeight:700,color:"#f1f5f9",margin:0,letterSpacing:"-0.01em"}}>Safilocare</p>
+              <p style={{fontSize:"10px",color:"#6366f1",margin:0,fontWeight:600,letterSpacing:"0.05em"}}>CRM PRO</p>
+            </div>
+          </div>
+        </div>
 
-  <div
-    style={{
-      color: "#136FB8",
-      fontWeight: "700",
-      fontSize: "18px"
-    }}
-  >
-    Safilo Healthcare
-  </div>
-</div>
         {/* Nav */}
         <nav style={{flex:1,padding:"12px 8px",overflowY:"auto"}}>
-  <p
-    style={{
-      fontSize:"10px",
-      color:"#94A3B8",
-      fontWeight:700,
-      letterSpacing:"0.1em",
-      padding:"4px 8px 10px",
-      textTransform:"uppercase"
-    }}
-  >
-    Menu
-  </p>
+          <p style={{fontSize:"10px",color:"#334155",fontWeight:700,letterSpacing:"0.1em",padding:"4px 8px 10px",textTransform:"uppercase"}}>Menu</p>
+          {NAV.map(n => {
+            const isActive = active === n.key;
+            return (
+              <button key={n.key} onClick={() => onNav(n.key)}
+                className="sidebar-link w-full text-left"
+                style={isActive ? {background:"rgba(99,102,241,0.2)",color:"#a5b4fc",borderLeft:"3px solid #6366f1",paddingLeft:"9px",borderRadius:"0 8px 8px 0"} : {}}>
+                <span style={{opacity:isActive?1:0.65}}>{n.icon}</span>
+                {n.label}
+                {n.key==="admin" && <span style={{marginLeft:"auto",fontSize:"10px",background:"rgba(239,68,68,0.2)",color:"#fca5a5",padding:"1px 6px",borderRadius:"20px"}}>⚙</span>}
+              </button>
+            );
+          })}
+        </nav>
 
-  {NAV.map(n => {
-    const isActive = active === n.key;
-
-    return (
-      <button
-        key={n.key}
-        onClick={() => onNav(n.key)}
-        className="sidebar-link w-full text-left"
-        style={{
-          color:"#FFFFFF",
-          fontWeight:700,
-          ...(isActive
-            ? {
-                background:"rgba(99,102,241,0.25)",
-                borderLeft:"4px solid #818CF8",
-                paddingLeft:"8px",
-                borderRadius:"0 10px 10px 0"
-              }
-            : {})
-        }}
-      >
-        <span
-          style={{
-            opacity:1,
-            color:"#FFFFFF"
-          }}
-        >
-          {n.icon}
-        </span>
-
-        {n.label}
-
-        {n.key==="admin" && (
-          <span
-            style={{
-              marginLeft:"auto",
-              fontSize:"10px",
-              background:"rgba(239,68,68,0.2)",
-              color:"#FCA5A5",
-              padding:"1px 6px",
-              borderRadius:"20px"
-            }}
-          >
-            ⚙
-          </span>
-        )}
-      </button>
-    );
-  })}
-</nav>
         {/* User footer */}
         <div style={{padding:"10px",borderTop:"1px solid rgba(255,255,255,0.06)"}}>
           <div style={{display:"flex",alignItems:"center",gap:"8px",padding:"8px 10px",borderRadius:"10px",background:"rgba(255,255,255,0.04)"}}>
@@ -163,7 +105,7 @@ export default function Layout({ user, userData, active, onNav, isAdmin, childre
             }
             <div style={{flex:1,minWidth:0}}>
               <p style={{fontSize:"12px",fontWeight:600,color:"#e2e8f0",margin:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user.displayName||"User"}</p>
-              <p style={{fontSize:"10px",color:"#6366f1",margin:0,fontWeight:600}}>{isAdmin?"Admin":userData?.salesperson||"CRM"}</p>
+              {isAdmin && <p style={{fontSize:"10px",color:"#6366f1",margin:0,fontWeight:600}}>Admin</p>}
             </div>
             <button onClick={() => signOut(auth)} title="Sign out"
               style={{color:"#475569",background:"none",border:"none",cursor:"pointer",padding:"4px",flexShrink:0}}
