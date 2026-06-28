@@ -79,7 +79,7 @@ export default function Layout({ user, userData, active, onNav, isAdmin, childre
 
   <div
     style={{
-      color: "#fff",
+      color: "#136FB8",
       fontWeight: "700",
       fontSize: "18px"
     }}
