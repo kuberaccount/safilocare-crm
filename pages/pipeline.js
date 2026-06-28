@@ -149,15 +149,36 @@ export default function PipelinePage({ currentUser }) {
     return `${Math.floor(s/86400)}d ago`;
   }
 
+  function parseDate(str) {
+    if (!str) return null;
+    // Handle DD-MM-YYYY format stored from old data
+    if (str.includes("-") && str.split("-")[0].length === 2) {
+      const [d,m,y] = str.split("-");
+      return new Date(`${y}-${m}-${d}`);
+    }
+    return new Date(str);
+  }
+
   function formatDate(str) {
     if (!str) return null;
-    const d = new Date(str);
+    const d = parseDate(str);
+    if (!d || isNaN(d)) return str;
     return d.toLocaleDateString("en-IN", { day:"2-digit", month:"short", year:"numeric" });
   }
 
   function isOverdue(str) {
     if (!str) return false;
-    return new Date(str) < new Date(new Date().toDateString());
+    const d = parseDate(str);
+    if (!d || isNaN(d)) return false;
+    return d < new Date(new Date().toDateString());
+  }
+
+  function isToday(str) {
+    if (!str) return false;
+    const d = parseDate(str);
+    if (!d || isNaN(d)) return false;
+    const t = new Date();
+    return d.getDate()===t.getDate() && d.getMonth()===t.getMonth() && d.getFullYear()===t.getFullYear();
   }
 
   const filtered = deals.filter(d => {
@@ -167,7 +188,18 @@ export default function PipelinePage({ currentUser }) {
   });
 
   const totalValue = filtered.filter(d=>d.stage!=="Lost").reduce((s,d)=>s+(parseFloat(d.value)||0),0);
-  const todayFollowUps = filtered.filter(d => d.followUpDate === new Date().toISOString().slice(0,10));
+  const todayStr = new Date().toISOString().slice(0,10);
+  const todayFollowUps = filtered.filter(d => {
+    if (!d.followUpDate) return false;
+    const fd = d.followUpDate;
+    if (fd === todayStr) return true;
+    // also check DD-MM-YYYY
+    if (fd.includes("-") && fd.split("-")[0].length === 2) {
+      const [day,mon,yr] = fd.split("-");
+      return `${yr}-${mon}-${day}` === todayStr;
+    }
+    return false;
+  });
   const setF = f => e => setDealForm(p => ({...p,[f]:e.target.value}));
 
   return (
