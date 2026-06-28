@@ -54,7 +54,7 @@ export default function PipelinePage({ currentUser }) {
   const [contactResults, setContactResults] = useState([]);
   const [showContactDrop, setShowContactDrop] = useState(false);
   const [actModal, setActModal] = useState(null);
-  const [actForm, setActForm] = useState({ type:"Email", subject:"", notes:"" });
+  const [actForm, setActForm] = useState({ type:"Email", subject:"", notes:"", followUpDate:"" });
   const [dealActivities, setDealActivities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -109,7 +109,7 @@ export default function PipelinePage({ currentUser }) {
   }
 
   async function openActModal(deal) {
-    setActModal(deal); setActForm({ type:"Email", subject:"", notes:"" });
+    setActModal(deal); setActForm({ type:"Email", subject:"", notes:"", followUpDate: deal.followUpDate || "" });
     setDealActivities(await getActivitiesForDeal(deal.id));
   }
 
@@ -119,7 +119,11 @@ export default function PipelinePage({ currentUser }) {
     try {
       await addActivity({ ...actForm, dealId:actModal.id, dealTitle:actModal.title, contact:actModal.contact, company:actModal.company, salesperson:actModal.salesperson });
       toast.success("Activity logged ✅");
-      setActForm({ type:"Email", subject:"", notes:"" });
+      setActForm({ type:"Email", subject:"", notes:"", followUpDate:"" });
+      // Update follow-up date on the deal if changed
+      if (actForm.followUpDate && actForm.followUpDate !== actModal.followUpDate) {
+        await updateDeal(actModal.id, { followUpDate: actForm.followUpDate });
+      }
       setDealActivities(await getActivitiesForDeal(actModal.id));
     } catch { toast.error("Failed"); }
     finally { setSaving(false); }
@@ -496,6 +500,17 @@ export default function PipelinePage({ currentUser }) {
             <div>
               <label style={{display:"block",fontSize:"11px",fontWeight:600,color:"#374151",marginBottom:"4px"}}>Notes</label>
               <textarea className="input" style={{resize:"none"}} rows={2} placeholder="What was discussed?" value={actForm.notes} onChange={e=>setActForm(f=>({...f,notes:e.target.value}))} />
+            </div>
+            <div>
+              <label style={{display:"block",fontSize:"11px",fontWeight:600,color:"#374151",marginBottom:"4px"}}>
+                📅 Next follow-up date <span style={{color:"#94a3b8",fontWeight:400}}>(updates deal)</span>
+              </label>
+              <input className="input" type="date" value={actForm.followUpDate} onChange={e=>setActForm(f=>({...f,followUpDate:e.target.value}))} />
+              {actForm.followUpDate && (
+                <p style={{fontSize:"11px",color:"#059669",marginTop:"4px",fontWeight:500}}>
+                  📅 Follow-up set for {new Date(actForm.followUpDate).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"})}
+                </p>
+              )}
             </div>
             <button className="btn btn-primary" style={{width:"100%",justifyContent:"center",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",border:"none"}} onClick={saveActivity} disabled={saving}>
               {saving?"Saving...":"Log activity"}
