@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { useState, useEffect } from "react";
-import { logAction } from "./activitylog";
+import { logAction } from "../lib/activitylog";
 import { getContacts, addContact, deleteContact, getSalespersons, addSalesperson, deleteDoc, doc, db } from "../lib/firebase";
 import Modal from "../components/Modal";
 import toast from "react-hot-toast";
