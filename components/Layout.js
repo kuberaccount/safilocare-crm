@@ -65,15 +65,14 @@ export default function Layout({ user, userData, active, onNav, isAdmin, childre
   style={{
     padding: "24px",
     textAlign: "center",
-    borderBottom: "1px solid rgba(255,255,255,0.06)"
+    borderBottom: "1px solid rgba(0,0,0,0.08)"
   }}
 >
   <img
     src="/logo.png"
-    alt="Safilo"
     style={{
-      width: "140px",
-      height: "auto",
+      width: "160px",
+      height: "auto"
       marginBottom: "10px"
     }}
   />
