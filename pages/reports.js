@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import toast from "react-hot-toast";
 import { getDeals, getContacts, getActivities, getSalespersons } from "../lib/firebase";
 
 function fmt(n) { return `₹${(parseFloat(n)||0).toLocaleString("en-IN")}`; }
@@ -29,6 +30,52 @@ export default function ReportsPage({ currentUser }) {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
+
+  function exportExcel() {
+    const isAdmin = currentUser?.role === "admin";
+    const spName = currentUser?.salesperson || "All";
+
+    // Deals sheet
+    const dealRows = [
+      ["Deal Title","Company","Contact","Stage","Lead Status","Party Type","Salesperson","Value (₹)","Follow-up Date","Notes"],
+      ...filteredDeals.map(d=>[
+        d.title||"", d.company||"", d.contact||"", d.stage||"",
+        d.leadStatus||"", d.partyType||"", d.salesperson||"",
+        d.value||"0", d.followUpDate||"", d.notes||""
+      ])
+    ];
+
+    // Won deals sheet
+    const wonRows = [
+      ["Deal Title","Company","Contact","Salesperson","Value (₹)"],
+      ...wonTable.map(d=>[d.title||"", d.company||"", d.contact||"", d.salesperson||"", d.value||"0"])
+    ];
+
+    // Contacts sheet — filtered by salesperson if not admin
+    const contactRows = [
+      ["Name","Company","Role","Email","Phone","City","State","Salesperson","Status"],
+      ...contacts
+        .filter(c => isAdmin ? true : c.salesperson === spName)
+        .map(c=>[c.name||"",c.company||"",c.role||"",c.email||"",c.phone||"",c.city||"",c.state||"",c.salesperson||"",c.status||""])
+    ];
+
+    function toCSV(rows) {
+      return rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
+    }
+
+    const today = new Date().toISOString().slice(0,10);
+    const label = isAdmin ? "all" : spName.toLowerCase().replace(/\s+/g,"-");
+    const csv = `DEALS REPORT — ${isAdmin?"All Salespersons":spName} — ${today}\n` +
+      toCSV(dealRows) + "\n\nWON DEALS\n" + toCSV(wonRows) +
+      "\n\nCONTACTS\n" + toCSV(contactRows);
+
+    const blob = new Blob([csv], { type:"text/csv;charset=utf-8;" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `safilocare-report-${label}-${today}.csv`;
+    a.click();
+    toast.success(`Exported ${isAdmin?"all":"your"} data ✅`);
+  }
 
   if (loading) return <div className="p-6 text-center text-gray-400 py-20">Loading reports...</div>;
 
@@ -115,13 +162,24 @@ export default function ReportsPage({ currentUser }) {
   return (
     <div className="p-6 max-w-6xl">
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <h1 className="text-xl font-bold text-gray-900">Reports</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl font-bold text-gray-900">Reports</h1>
+        </div>
         <div className="flex gap-2 flex-wrap items-center">
           {currentUser?.role === "admin" && (
             <select className="input w-44" value={filterSP} onChange={e=>setFilterSP(e.target.value)}>
               {spNames.map(s=><option key={s}>{s}</option>)}
             </select>
           )}
+          <button onClick={exportExcel}
+            style={{display:"inline-flex",alignItems:"center",gap:"6px",padding:"7px 14px",borderRadius:"8px",border:"1px solid #16a34a",background:"#f0fdf4",color:"#16a34a",fontSize:"13px",fontWeight:600,cursor:"pointer",transition:"all 0.15s"}}
+            onMouseOver={e=>{e.currentTarget.style.background="#16a34a";e.currentTarget.style.color="white";}}
+            onMouseOut={e=>{e.currentTarget.style.background="#f0fdf4";e.currentTarget.style.color="#16a34a";}}>
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+            </svg>
+            Export {currentUser?.role === "admin" ? "All Data" : "My Data"}
+          </button>
         </div>
       </div>
 
