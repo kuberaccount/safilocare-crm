@@ -1,14 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { useState, useEffect } from "react";
-import { getContacts,
-  addContact,
-  updateContact,
-  deleteContact,
-  getSalespersons,
-  addSalesperson,
-  deleteSalesperson,
-  checkDuplicatePhone } from "../lib/firebase";
+import { getContacts, addContact, updateContact, deleteContact, getSalespersons, addSalesperson, deleteSalesperson } from "../lib/firebase";
 import { logAction } from "../lib/activitylog";
 import Modal from "../components/Modal";
 import toast from "react-hot-toast";
@@ -44,83 +37,42 @@ export default function ContactsPage({ currentUser }) {
   useEffect(() => { load(); }, []);
 
   async function load() {
-  setLoading(true);
-
-  try {
-    const [c, s] = await Promise.all([
-      getContacts(),
-      getSalespersons()
-    ]);
-
-    setContacts(c);
-    setSalespersons(s);
-  } catch (e) {
-    toast.error("Could not load contacts");
-  } finally {
-    setLoading(false);
+    setLoading(true);
+    try {
+      // ALL salespersons see ALL contacts (so they can check if contact already exists)
+      // Export is still restricted to their own assigned contacts
+      const [c, s] = await Promise.all([getContacts(null), getSalespersons()]);
+      setContacts(c); setSalespersons(s);
+    } catch(e) { toast.error("Could not load contacts"); }
+    finally { setLoading(false); }
   }
-}
 
   function openAdd() { setForm(EMPTY_FORM); setEditContact(null); setShowModal(true); }
   function openEdit(c) { setForm({...EMPTY_FORM,...c}); setEditContact(c); setShowModal(true); }
 
   async function save() {
-  if (!form.name.trim()) {
-    return toast.error("Name is required");
+    if (!form.name.trim()) return toast.error("Name is required");
+    setSaving(true);
+    try {
+      if (editContact) {
+        await updateContact(editContact.id, form);
+        // Safe logAction — won't break save if it fails
+        try { await logAction(currentUser, "Updated Lead", { contactName: form.name, company: form.company }); } catch {}
+        toast.success("Contact updated ✅");
+      } else {
+        await addContact(form);
+        try { await logAction(currentUser, "Added Contact", { contactName: form.name, company: form.company }); } catch {}
+        toast.success("Contact added ✅");
+      }
+      setShowModal(false);
+      setForm(EMPTY_FORM);
+      load();
+    } catch(e) {
+      console.error("Save error:", e);
+      toast.error("Failed to save: " + (e.message || "unknown error"));
+    } finally { setSaving(false); }
   }
 
-  const phone = (form.phone || "").trim();
-
-  if (phone) {
-    const exists = await checkDuplicatePhone(
-      phone,
-      editContact?.id || null
-    );
-
-    if (exists) {
-      toast.error("Phone number already added");
-      return;
-    }
-  }
-
-  setSaving(true);
-
-  try {
-    if (editContact) {
-      await updateContact(editContact.id, form);
-
-      try {
-        await logAction(currentUser, "Updated Lead", {
-          contactName: form.name,
-          company: form.company
-        });
-      } catch {}
-
-      toast.success("Contact updated ✅");
-    } else {
-      await addContact(form);
-
-      try {
-        await logAction(currentUser, "Added Contact", {
-          contactName: form.name,
-          company: form.company
-        });
-      } catch {}
-
-      toast.success("Contact added ✅");
-    }
-
-    setShowModal(false);
-    setForm(EMPTY_FORM);
-    load();
-
-  } catch (e) {
-    console.error(e);
-    toast.error("Failed to save");
-  } finally {
-    setSaving(false);
-  }
-}
   async function archive(contact) {
     try {
       await updateContact(contact.id, { archived: !contact.archived });
@@ -166,19 +118,24 @@ export default function ContactsPage({ currentUser }) {
   }
 
   function exportCSV() {
-    const headers = ["Name","Company","Role","Email","Phone","City","State","Pincode","Salesperson","Status","Notes","Archived"];
-    const rows = filtered.map(c =>
-      [c.name,c.company,c.role,c.email,c.phone,c.city,c.state,c.pincode,c.salesperson,c.status,c.notes,c.archived?"Yes":"No"]
-        .map(v => `"${(v||"").replace(/"/g,'""')}"`)
-        .join(",")
+    const isAdmin = currentUser?.role === "admin";
+    const spName = currentUser?.salesperson || "";
+    // Salesperson only exports their own contacts
+    const exportData = isAdmin ? filtered : filtered.filter(c => c.salesperson === spName);
+    const headers = ["Name","Company","Role","Email","Phone","City","State","Pincode","Salesperson","Status","Notes"];
+    const rows = exportData.map(c =>
+      [c.name,c.company,c.role,c.email,c.phone,c.city,c.state,c.pincode,c.salesperson,c.status,c.notes]
+        .map(v => `"${(v||"").replace(/"/g,'""')}"`).join(",")
     );
+    const today = new Date().toISOString().slice(0,10);
+    const label = isAdmin ? "all" : spName.toLowerCase().replace(/\s+/g,"-");
     const csv = [headers.join(","), ...rows].join("\n");
     const blob = new Blob([csv], { type:"text/csv" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `safilocare-contacts-${new Date().toISOString().slice(0,10)}.csv`;
+    a.download = `safilocare-contacts-${label}-${today}.csv`;
     a.click();
-    toast.success("Exported!");
+    toast.success(`Exported ${isAdmin?"all":"your"} contacts ✅`);
   }
 
   const set = field => e => setForm(f => ({...f, [field]: e.target.value}));
@@ -209,7 +166,7 @@ export default function ContactsPage({ currentUser }) {
           </button>
           <button className="btn btn-secondary" onClick={exportCSV}>
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-            Export CSV
+            {currentUser?.role === "admin" ? "Export All CSV" : "Export My CSV"}
           </button>
           <button className="btn btn-primary" onClick={openAdd}
             style={{background:"linear-gradient(135deg,#6366f1,#8b5cf6)",border:"none"}}>
