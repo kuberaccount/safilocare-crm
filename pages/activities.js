@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { getActivities, addActivity,updateActivity, deleteActivity, getSalespersons } from "../lib/firebase";
+import { getActivities, addActivity, updateActivity, deleteActivity, getSalespersons } from "../lib/firebase";
+import { logAction } from "../lib/activitylog";
 import Modal from "../components/Modal";
 import toast from "react-hot-toast";
 import { exportToCSV, fmtDateForExport } from "../lib/export";
@@ -55,41 +56,47 @@ export default function ActivitiesPage({ currentUser }) {
     finally { setLoading(false); }
   }
 
- async function save() {
-  if (!form.subject.trim()) {
-    return toast.error("Subject is required");
-  }
-
-  setSaving(true);
-
-  try {
-    if (editActivity) {
-      await updateActivity(editActivity.id, form);
-      toast.success("Activity updated");
-    } else {
-      await addActivity(form);
-      toast.success("Activity logged");
+  async function save() {
+    if (!form.subject.trim()) {
+      return toast.error("Subject is required");
     }
 
-    setShowModal(false);
-    setEditActivity(null);
+    setSaving(true);
 
-    setForm({
-      type: "Email",
-      subject: "",
-      contact: "",
-      company: "",
-      notes: "",
-      date: todayStr()
-    });
+    try {
+      if (editActivity) {
+        await updateActivity(editActivity.id, form);
+        toast.success("Activity updated");
+        // Log action — wrapped so a logging failure never blocks the real save
+        try { await logAction(currentUser, "Updated Lead", { activityType: form.type, subject: form.subject, dealTitle: form.company || form.contact }); } catch {}
+      } else {
+        await addActivity(form);
+        toast.success("Activity logged");
+        try { await logAction(currentUser, "Logged Activity", { activityType: form.type, subject: form.subject, dealTitle: form.company || form.contact }); } catch {}
+      }
 
-    load();
-  } catch {
-    toast.error("Failed to save");
-  } finally {
-    setSaving(false);
+      setShowModal(false);
+      setEditActivity(null);
+
+      setForm({
+        type: "Email",
+        subject: "",
+        contact: "",
+        company: "",
+        notes: "",
+        date: todayStr()
+      });
+
+      load();
+    } catch (e) {
+      // Surface the real reason instead of a generic "Failed to save" —
+      // this is what was making successful saves look like failures.
+      console.error("Activity save error:", e);
+      toast.error("Failed to save: " + (e?.message || "unknown error"));
+    } finally {
+      setSaving(false);
+    }
   }
-}
 
   async function remove(id) {
     if (!confirm("Delete this activity?")) return;
@@ -182,49 +189,49 @@ export default function ActivitiesPage({ currentUser }) {
                       {a.notes && <p className="text-xs text-gray-500 mt-1.5 bg-gray-50 rounded p-2">{a.notes}</p>}
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
-  <span className="text-xs text-gray-300">
-    {timeAgo(a.createdAt)}
-  </span>
+                      <span className="text-xs text-gray-300">
+                        {timeAgo(a.createdAt)}
+                      </span>
 
-  <button
-    onClick={() => {
-      setEditActivity(a);
+                      <button
+                        onClick={() => {
+                          setEditActivity(a);
 
-      setForm({
-        type: a.type || "Email",
-        subject: a.subject || "",
-        contact: a.contact || "",
-        company: a.company || "",
-        notes: a.notes || "",
-        date: a.date || todayStr()
-      });
+                          setForm({
+                            type: a.type || "Email",
+                            subject: a.subject || "",
+                            contact: a.contact || "",
+                            company: a.company || "",
+                            notes: a.notes || "",
+                            date: a.date || todayStr()
+                          });
 
-      setShowModal(true);
-    }}
-    className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-blue-500 transition-all"
-  >
-    ✏️
-  </button>
+                          setShowModal(true);
+                        }}
+                        className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-blue-500 transition-all"
+                      >
+                        ✏️
+                      </button>
 
-  <button
-    onClick={() => remove(a.id)}
-    className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-400 transition-all"
-  >
-    <svg
-      className="w-4 h-4"
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M6 18L18 6M6 6l12 12"
-      />
-    </svg>
-  </button>
-</div>
+                      <button
+                        onClick={() => remove(a.id)}
+                        className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-400 transition-all"
+                      >
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M6 18L18 6M6 6l12 12"
+                          />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
