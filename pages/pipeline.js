@@ -25,8 +25,6 @@ const STATUS_STYLE = {
   Cold: { bg:"#dbeafe", color:"#1e40af", dot:"#3b82f6" },
 };
 
-const ACT_TYPE_ICON = { Email:"✉️", Call:"📞", Meeting:"🗓️", Note:"📝" };
-
 const EMPTY_DEAL = {
   title:"", contactId:"", contact:"", phone:"", company:"", value:"",
   stage:"Lead", leadStatus:"Cold", partyType:"", leadType:"B2B",
@@ -42,13 +40,6 @@ function Avatar({ name, size=28 }) {
       {(name||"?").charAt(0).toUpperCase()}
     </div>
   );
-}
-
-// Safely run a non-critical action (like audit logging) without ever
-// letting it surface as a false "failed" toast for an action that
-// actually already succeeded.
-async function safeLog(fn) {
-  try { await fn(); } catch (e) { console.error("logAction error (non-blocking):", e); }
 }
 
 export default function PipelinePage({ currentUser }) {
@@ -111,21 +102,15 @@ export default function PipelinePage({ currentUser }) {
     if (!dealForm.contactId && !dealForm.contact) return toast.error("Please select a contact");
     setSaving(true);
     try {
-      if (editDeal) {
-        await updateDeal(editDeal.id, dealForm);
-        toast.success("Deal updated ✅");
-        const action = dealForm.stage === "Won" ? "Won Deal" : dealForm.followUpDate !== editDeal.followUpDate ? "Marked Follow-up" : "Updated Lead";
-        await safeLog(() => logAction(currentUser, action, { dealTitle: dealForm.title, stage: dealForm.stage, followUpDate: dealForm.followUpDate }));
-      } else {
-        await addDeal(dealForm);
-        toast.success("Deal added ✅");
-        await safeLog(() => logAction(currentUser, "Added Lead", { dealTitle: dealForm.title, contact: dealForm.contact, company: dealForm.company }));
-      }
+      if (editDeal) { await updateDeal(editDeal.id, dealForm);
+      const action = dealForm.stage === "Won" ? "Won Deal" : dealForm.followUpDate !== editDeal.followUpDate ? "Marked Follow-up" : "Updated Lead";
+      await logAction(currentUser, action, { dealTitle: dealForm.title, stage: dealForm.stage, followUpDate: dealForm.followUpDate });
+      toast.success("Deal updated ✅"); }
+      else { await addDeal(dealForm);
+      await logAction(currentUser, "Added Lead", { dealTitle: dealForm.title, contact: dealForm.contact, company: dealForm.company });
+      toast.success("Deal added ✅"); }
       setShowDealModal(false); load();
-    } catch (e) {
-      console.error("Deal save error:", e);
-      toast.error("Failed to save: " + (e?.message || "unknown error"));
-    }
+    } catch { toast.error("Failed to save"); }
     finally { setSaving(false); }
   }
 
@@ -138,27 +123,16 @@ export default function PipelinePage({ currentUser }) {
     if (!actForm.subject.trim()) return toast.error("Subject required");
     setSaving(true);
     try {
-      // 1. The actual save — this is the only thing that determines success/failure
       await addActivity({ ...actForm, dealId:actModal.id, dealTitle:actModal.title, contact:actModal.contact, company:actModal.company, salesperson:actModal.salesperson });
       toast.success("Activity logged ✅");
-
-      // 2. Everything below is "nice to have" — none of it should ever
-      //    turn a successful save into a false "Failed" toast.
-      await safeLog(() => logAction(currentUser, "Logged Activity", { dealTitle: actModal.title, activityType: actForm.type, subject: actForm.subject }));
-
-      if (actForm.followUpDate && actForm.followUpDate !== actModal.followUpDate) {
-        try { await updateDeal(actModal.id, { followUpDate: actForm.followUpDate }); }
-        catch (e) { console.error("Follow-up date update failed (non-blocking):", e); }
-      }
-
+      await logAction(currentUser, "Logged Activity", { dealTitle: actModal.title, activityType: actForm.type, subject: actForm.subject });
       setActForm({ type:"Email", subject:"", notes:"", followUpDate:"" });
-      try { setDealActivities(await getActivitiesForDeal(actModal.id)); }
-      catch (e) { console.error("Refresh activity list failed (non-blocking):", e); }
-    } catch (e) {
-      // Only the real addActivity() failure lands here now
-      console.error("Activity save error:", e);
-      toast.error("Failed to log activity: " + (e?.message || "unknown error"));
-    }
+      // Update follow-up date on the deal if changed
+      if (actForm.followUpDate && actForm.followUpDate !== actModal.followUpDate) {
+        await updateDeal(actModal.id, { followUpDate: actForm.followUpDate });
+      }
+      setDealActivities(await getActivitiesForDeal(actModal.id));
+    } catch { toast.error("Failed"); }
     finally { setSaving(false); }
   }
 
@@ -166,7 +140,7 @@ export default function PipelinePage({ currentUser }) {
     if (!confirm("Delete this deal?")) return;
     const delDeal = deals.find(d=>d.id===id);
     await deleteDeal(id);
-    await safeLog(() => logAction(currentUser, "Deleted Lead", { dealTitle: delDeal?.title || id }));
+    await logAction(currentUser, "Deleted Lead", { dealTitle: delDeal?.title || id });
     toast.success("Deleted");
     setDeals(d => d.filter(x => x.id !== id));
   }
@@ -175,7 +149,7 @@ export default function PipelinePage({ currentUser }) {
   async function onDrop(stage) {
     if (!dragDeal.current || dragDeal.current.stage === stage) { dragDeal.current=null; return; }
     await updateDeal(dragDeal.current.id, { stage });
-    await safeLog(() => logAction(currentUser, stage === 'Won' ? 'Won Deal' : 'Moved Stage', { dealTitle: dragDeal.current.title, stage }));
+    await logAction(currentUser, stage === 'Won' ? 'Won Deal' : 'Moved Stage', { dealTitle: dragDeal.current.title, stage });
     toast.success(`Moved to ${stage} 📌`);
     dragDeal.current = null; load();
   }
@@ -188,12 +162,6 @@ export default function PipelinePage({ currentUser }) {
     if (s<3600) return `${Math.floor(s/60)}m ago`;
     if (s<86400) return `${Math.floor(s/3600)}h ago`;
     return `${Math.floor(s/86400)}d ago`;
-  }
-
-  function fullDateTime(ts) {
-    if (!ts) return "—";
-    const d = ts.toDate ? ts.toDate() : new Date(ts);
-    return d.toLocaleString("en-IN", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" });
   }
 
   function parseDate(str) {
@@ -570,47 +538,20 @@ export default function PipelinePage({ currentUser }) {
             <button className="btn btn-primary" style={{width:"100%",justifyContent:"center",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",border:"none"}} onClick={saveActivity} disabled={saving}>
               {saving?"Saving...":"Log activity"}
             </button>
-
-            {/* Lead-wise activity history — every past entry for THIS deal,
-                newest first, so it reads as a timeline of what happened and when. */}
-            <div style={{borderTop:"1px solid #f1f5f9",paddingTop:"12px"}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"8px"}}>
-                <p style={{fontSize:"11px",fontWeight:700,color:"#64748b",margin:0,textTransform:"uppercase",letterSpacing:"0.05em"}}>
-                  History for {actModal.title}
-                </p>
-                <span style={{fontSize:"11px",fontWeight:700,color:"white",background:"#6366f1",borderRadius:"20px",padding:"1px 8px"}}>
-                  {dealActivities.length}
-                </span>
-              </div>
-              {dealActivities.length===0 ? (
-                <p style={{fontSize:"12px",color:"#94a3b8",textAlign:"center",padding:"12px 0"}}>No activity logged yet for this lead.</p>
-              ) : (
-                <div style={{display:"flex",flexDirection:"column",maxHeight:"220px",overflowY:"auto"}}>
-                  {dealActivities.map((a,i)=>(
-                    <div key={a.id} style={{display:"flex",gap:"10px",position:"relative",paddingBottom: i===dealActivities.length-1 ? 0 : "12px"}}>
-                      {/* Timeline rail */}
-                      <div style={{display:"flex",flexDirection:"column",alignItems:"center",flexShrink:0}}>
-                        <div style={{width:"22px",height:"22px",borderRadius:"50%",background:"#eef2ff",color:"#6366f1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"11px",flexShrink:0}}>
-                          {ACT_TYPE_ICON[a.type] || "•"}
-                        </div>
-                        {i !== dealActivities.length-1 && (
-                          <div style={{flex:1,width:"2px",background:"#e2e8f0",marginTop:"2px"}}/>
-                        )}
-                      </div>
-                      {/* Entry content */}
-                      <div style={{flex:1,paddingBottom:"2px"}}>
-                        <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:"8px"}}>
-                          <p style={{fontSize:"12px",fontWeight:700,color:"#0f172a",margin:0}}>{a.type}: {a.subject}</p>
-                          <span style={{fontSize:"10px",color:"#94a3b8",flexShrink:0}}>{timeAgo(a.createdAt)}</span>
-                        </div>
-                        {a.notes && <p style={{fontSize:"11px",color:"#64748b",margin:"2px 0 0"}}>{a.notes}</p>}
-                        <p style={{fontSize:"10px",color:"#cbd5e1",margin:"2px 0 0"}}>{fullDateTime(a.createdAt)}{a.salesperson && ` · ${a.salesperson}`}</p>
-                      </div>
+            {dealActivities.length>0 && (
+              <div style={{borderTop:"1px solid #f1f5f9",paddingTop:"12px"}}>
+                <p style={{fontSize:"11px",fontWeight:600,color:"#64748b",marginBottom:"8px",textTransform:"uppercase",letterSpacing:"0.05em"}}>Past activities</p>
+                <div style={{display:"flex",flexDirection:"column",gap:"6px",maxHeight:"140px",overflowY:"auto"}}>
+                  {dealActivities.map(a=>(
+                    <div key={a.id} style={{fontSize:"12px",background:"#f8fafc",borderRadius:"8px",padding:"8px 10px",display:"flex",gap:"8px",alignItems:"flex-start"}}>
+                      <span style={{fontWeight:700,color:"#6366f1",flexShrink:0}}>{a.type}</span>
+                      <span style={{color:"#374151",flex:1}}>{a.subject}</span>
+                      <span style={{color:"#94a3b8",flexShrink:0}}>{timeAgo(a.createdAt)}</span>
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </Modal>
       )}
