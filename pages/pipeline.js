@@ -28,7 +28,7 @@ const STATUS_STYLE = {
 const ACT_TYPE_ICON = { Email:"✉️", Call:"📞", Meeting:"🗓️", Note:"📝" };
 
 const EMPTY_DEAL = {
-  contactId:"", contact:"", phone:"", company:"", value:"",
+  title:"",contactId:"", contact:"", phone:"", company:"", value:"",
   stage:"Lead", leadStatus:"Cold", partyType:"", leadType:"B2B",
   salesperson:"Unassigned", followUpDate:"", notes:""
 };
