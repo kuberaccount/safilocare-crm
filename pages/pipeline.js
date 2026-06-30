@@ -80,6 +80,13 @@ function exportPipelineCSV(rows, label) {
 }
 
 export default function PipelinePage({ currentUser }) {
+  /* ── SALESPERSON-LOCK ADDITIONS — added per request ─────────────────
+     isAdmin / mySalesperson computed once here so they can be reused
+     everywhere below without changing any other existing logic. */
+  const isAdmin = currentUser?.role === "admin";
+  const mySalesperson = currentUser?.salesperson || "Unassigned";
+  /* ──────────────────────────────────────────────────────────────── */
+
   const [deals, setDeals] = useState([]);
   const [contacts, setContacts] = useState([]);
   const [salespersons, setSalespersons] = useState([]);
@@ -139,14 +146,22 @@ export default function PipelinePage({ currentUser }) {
   function selectContact(c) {
     setDealForm(f => ({
       ...f, contactId:c.id, contact:c.name, phone:c.phone||"", company:c.company||"",
-      salesperson:c.salesperson||f.salesperson, partyType:c.partyType||f.partyType,
+      /* SALESPERSON-LOCK: non-admins always keep their own name here,
+         regardless of whose contact this is. */
+      salesperson: isAdmin ? (c.salesperson || f.salesperson) : mySalesperson,
+      partyType:c.partyType||f.partyType,
       title: buildDealTitle(c.name, c.company||"")
     }));
     setContactSearch(`${c.name}${c.phone?" — "+c.phone:""}`);
     setShowContactDrop(false);
   }
 
-  function openAdd() { setDealForm(EMPTY_DEAL); setEditDeal(null); setContactSearch(""); setShowDealModal(true); }
+  function openAdd() {
+    /* SALESPERSON-LOCK: pre-fill with the logged-in salesperson's own name
+       instead of "Unassigned" when they open the Add deal form. */
+    setDealForm({ ...EMPTY_DEAL, salesperson: isAdmin ? "Unassigned" : mySalesperson });
+    setEditDeal(null); setContactSearch(""); setShowDealModal(true);
+  }
   function openEdit(deal) {
     setDealForm({...EMPTY_DEAL,...deal}); setEditDeal(deal);
     setContactSearch(deal.contact?`${deal.contact}${deal.phone?" — "+deal.phone:""}` : "");
@@ -157,7 +172,14 @@ export default function PipelinePage({ currentUser }) {
     if (!dealForm.contactId && !dealForm.contact) return toast.error("Please select a contact");
     // Title is always derived from the current contact/company, never
     // hand-typed, so edits to the contact stay reflected automatically.
-    const finalForm = { ...dealForm, title: buildDealTitle(dealForm.contact, dealForm.company) };
+    /* SALESPERSON-LOCK: force the salesperson field server-side too, so a
+       non-admin can never end up saving a deal under someone else's name
+       even if the form state was somehow tampered with. */
+    const finalForm = {
+      ...dealForm,
+      title: buildDealTitle(dealForm.contact, dealForm.company),
+      salesperson: isAdmin ? dealForm.salesperson : mySalesperson,
+    };
     setSaving(true);
     try {
       if (editDeal) {
@@ -668,12 +690,24 @@ export default function PipelinePage({ currentUser }) {
                 </div>
               </div>
 
+              {/* SALESPERSON-LOCK: this block replaces the old plain dropdown.
+                  Admin still gets the same dropdown as before. Non-admin sees
+                  their own name as locked, read-only text instead. */}
               <div>
-                <label style={{display:"block",fontSize:"11px",fontWeight:600,color:"#374151",marginBottom:"4px"}}>Assigned salesperson</label>
-                <select className="input" value={dealForm.salesperson} onChange={setF("salesperson")}>
-                  <option>Unassigned</option>
-                  {salespersons.map(s=><option key={s.id}>{s.name}</option>)}
-                </select>
+                <label style={{display:"block",fontSize:"11px",fontWeight:600,color:"#374151",marginBottom:"4px"}}>
+                  Assigned salesperson {!isAdmin && <span style={{color:"#94a3b8",fontWeight:400}}>(you)</span>}
+                </label>
+                {isAdmin ? (
+                  <select className="input" value={dealForm.salesperson} onChange={setF("salesperson")}>
+                    <option>Unassigned</option>
+                    {salespersons.map(s=><option key={s.id}>{s.name}</option>)}
+                  </select>
+                ) : (
+                  <div className="input" style={{background:"#f8fafc",color:"#374151",fontWeight:600,cursor:"not-allowed",display:"flex",alignItems:"center",gap:"6px"}}>
+                    <Avatar name={mySalesperson} size={18}/>
+                    {mySalesperson}
+                  </div>
+                )}
               </div>
 
               <div>
