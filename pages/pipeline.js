@@ -6,7 +6,7 @@ import toast from "react-hot-toast";
 
 const STAGES = ["Lead","Qualified","Proposal","Negotiation","Won","Lost"];
 const LEAD_STATUSES = ["Cold","Warm","Hot"];
-const PARTY_TYPES = ["Export","Super Stockist","Distributor / Dealer","Retailer","Surgical / Pharma Dealer"];
+const PARTY_TYPES = ["Super Stockist","Distributor / Dealer","Retailer","Surgical / Pharma Dealer","Export"];
 const LEAD_TYPES = ["B2B","B2C","B2G"];
 const ACT_TYPES = ["Email","Call","Meeting","Note"];
 
@@ -28,10 +28,19 @@ const STATUS_STYLE = {
 const ACT_TYPE_ICON = { Email:"✉️", Call:"📞", Meeting:"🗓️", Note:"📝" };
 
 const EMPTY_DEAL = {
-  title:"",contactId:"", contact:"", phone:"", company:"", value:"",
+  title:"", contactId:"", contact:"", phone:"", company:"", value:"",
   stage:"Lead", leadStatus:"Cold", partyType:"", leadType:"B2B",
   salesperson:"Unassigned", followUpDate:"", notes:""
 };
+
+// Deal title is no longer manually typed — it's derived from the selected
+// contact so it always stays in sync with who the deal is actually for.
+function buildDealTitle(contact, company) {
+  if (contact && company) return `${contact} — ${company}`;
+  if (contact) return contact;
+  if (company) return company;
+  return "Untitled deal";
+}
 
 function Avatar({ name, size=28 }) {
   const colors = ["#6366f1","#8b5cf6","#ec4899","#f59e0b","#10b981","#3b82f6","#ef4444"];
@@ -44,20 +53,40 @@ function Avatar({ name, size=28 }) {
   );
 }
 
+// Safely run a non-critical action (like audit logging) without ever
+// letting it surface as a false "failed" toast for an action that
+// actually already succeeded.
 async function safeLog(fn) {
   try { await fn(); } catch (e) { console.error("logAction error (non-blocking):", e); }
 }
 
-export default function PipelinePage({ currentUser }) {
-  const isAdmin = currentUser?.role === "admin";
-  const mySalesperson = currentUser?.salesperson || "Unassigned";
+function exportPipelineCSV(rows, label) {
+  if (rows.length === 0) return toast.error("No deals to export");
+  const csvRows = [
+    ["Deal","Contact","Company","Phone","Stage","Lead Status","Party Type","Lead Type","Salesperson","Value (₹)","Follow-up Date","Notes"],
+    ...rows.map(d => [
+      d.title||"", d.contact||"", d.company||"", d.phone||"", d.stage||"",
+      d.leadStatus||"", d.partyType||"", d.leadType||"", d.salesperson||"",
+      d.value||"0", d.followUpDate||"", d.notes||""
+    ])
+  ];
+  const csv = csvRows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `pipeline-${label}-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  toast.success("Exported ✅");
+}
 
+export default function PipelinePage({ currentUser }) {
   const [deals, setDeals] = useState([]);
   const [contacts, setContacts] = useState([]);
   const [salespersons, setSalespersons] = useState([]);
-  // Non-admins are LOCKED to their own salesperson name — no dropdown choice.
-  const [filterSP, setFilterSP] = useState(isAdmin ? "All" : mySalesperson);
+  const [filterSP, setFilterSP] = useState("All");
   const [filterStatus, setFilterStatus] = useState("All");
+  const [filterLeadType, setFilterLeadType] = useState("All");
+  const [filterPartyType, setFilterPartyType] = useState("All");
   const [showDealModal, setShowDealModal] = useState(false);
   const [editDeal, setEditDeal] = useState(null);
   const [dealForm, setDealForm] = useState(EMPTY_DEAL);
@@ -69,20 +98,28 @@ export default function PipelinePage({ currentUser }) {
   const [dealActivities, setDealActivities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [showBreakdown, setShowBreakdown] = useState(false);
+  const [openMenuId, setOpenMenuId] = useState(null);
   const dragDeal = useRef(null);
   const dragOver = useRef(null);
 
   useEffect(() => { load(); }, []);
 
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (openMenuId && !e.target.closest("[data-deal-menu]")) {
+        setOpenMenuId(null);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [openMenuId]);
+
   async function load() {
     setLoading(true);
     try {
-      // CRITICAL: non-admins ALWAYS pass their own salesperson name to getDeals.
-      // This is a hard server-side-style filter — never null for a non-admin,
-      // even if currentUser.salesperson is somehow blank (falls back to a
-      // name that won't match anything, rather than silently loading all deals).
-      const sp = isAdmin ? null : (currentUser?.salesperson || "__none__");
-      const [d, c, s] = await Promise.all([getDeals(sp), getContacts(null), getSalespersons()]);
+      const sp = currentUser?.role !== "admin" ? currentUser?.salesperson : null;
+      const [d, c, s] = await Promise.all([getDeals(sp), getContacts(sp), getSalespersons()]);
       setDeals(d); setContacts(c); setSalespersons(s);
     } catch { toast.error("Could not load"); }
     finally { setLoading(false); }
@@ -99,15 +136,16 @@ export default function PipelinePage({ currentUser }) {
   }
 
   function selectContact(c) {
-    setDealForm(f => ({ ...f, contactId:c.id, contact:c.name, phone:c.phone||"", company:c.company||"", salesperson:c.salesperson||f.salesperson, partyType:c.partyType||f.partyType }));
+    setDealForm(f => ({
+      ...f, contactId:c.id, contact:c.name, phone:c.phone||"", company:c.company||"",
+      salesperson:c.salesperson||f.salesperson, partyType:c.partyType||f.partyType,
+      title: buildDealTitle(c.name, c.company||"")
+    }));
     setContactSearch(`${c.name}${c.phone?" — "+c.phone:""}`);
     setShowContactDrop(false);
   }
 
-  function openAdd() {
-    setDealForm({ ...EMPTY_DEAL, salesperson: isAdmin ? "Unassigned" : mySalesperson });
-    setEditDeal(null); setContactSearch(""); setShowDealModal(true);
-  }
+  function openAdd() { setDealForm(EMPTY_DEAL); setEditDeal(null); setContactSearch(""); setShowDealModal(true); }
   function openEdit(deal) {
     setDealForm({...EMPTY_DEAL,...deal}); setEditDeal(deal);
     setContactSearch(deal.contact?`${deal.contact}${deal.phone?" — "+deal.phone:""}` : "");
@@ -115,10 +153,10 @@ export default function PipelinePage({ currentUser }) {
   }
 
   async function saveDeal() {
-    if (!dealForm.title.trim()) return toast.error("Deal title required");
     if (!dealForm.contactId && !dealForm.contact) return toast.error("Please select a contact");
-    // Non-admins can't reassign a deal away from themselves
-    const finalForm = isAdmin ? dealForm : { ...dealForm, salesperson: mySalesperson };
+    // Title is always derived from the current contact/company, never
+    // hand-typed, so edits to the contact stay reflected automatically.
+    const finalForm = { ...dealForm, title: buildDealTitle(dealForm.contact, dealForm.company) };
     setSaving(true);
     try {
       if (editDeal) {
@@ -148,9 +186,12 @@ export default function PipelinePage({ currentUser }) {
     if (!actForm.subject.trim()) return toast.error("Subject required");
     setSaving(true);
     try {
+      // 1. The actual save — this is the only thing that determines success/failure
       await addActivity({ ...actForm, dealId:actModal.id, dealTitle:actModal.title, contact:actModal.contact, company:actModal.company, salesperson:actModal.salesperson });
       toast.success("Activity logged ✅");
 
+      // 2. Everything below is "nice to have" — none of it should ever
+      //    turn a successful save into a false "Failed" toast.
       await safeLog(() => logAction(currentUser, "Logged Activity", { dealTitle: actModal.title, activityType: actForm.type, subject: actForm.subject }));
 
       if (actForm.followUpDate && actForm.followUpDate !== actModal.followUpDate) {
@@ -162,6 +203,7 @@ export default function PipelinePage({ currentUser }) {
       try { setDealActivities(await getActivitiesForDeal(actModal.id)); }
       catch (e) { console.error("Refresh activity list failed (non-blocking):", e); }
     } catch (e) {
+      // Only the real addActivity() failure lands here now
       console.error("Activity save error:", e);
       toast.error("Failed to log activity: " + (e?.message || "unknown error"));
     }
@@ -204,6 +246,7 @@ export default function PipelinePage({ currentUser }) {
 
   function parseDate(str) {
     if (!str) return null;
+    // Handle DD-MM-YYYY format stored from old data
     if (str.includes("-") && str.split("-")[0].length === 2) {
       const [d,m,y] = str.split("-");
       return new Date(`${y}-${m}-${d}`);
@@ -225,10 +268,20 @@ export default function PipelinePage({ currentUser }) {
     return d < new Date(new Date().toDateString());
   }
 
+  function isToday(str) {
+    if (!str) return false;
+    const d = parseDate(str);
+    if (!d || isNaN(d)) return false;
+    const t = new Date();
+    return d.getDate()===t.getDate() && d.getMonth()===t.getMonth() && d.getFullYear()===t.getFullYear();
+  }
+
   const filtered = deals.filter(d => {
-    const matchSP = isAdmin ? (filterSP === "All" || d.salesperson === filterSP) : true; // already pre-filtered by load()
+    const matchSP = filterSP === "All" || d.salesperson === filterSP;
     const matchStatus = filterStatus === "All" || d.leadStatus === filterStatus;
-    return matchSP && matchStatus;
+    const matchLeadType = filterLeadType === "All" || d.leadType === filterLeadType;
+    const matchPartyType = filterPartyType === "All" || d.partyType === filterPartyType;
+    return matchSP && matchStatus && matchLeadType && matchPartyType;
   });
 
   const totalValue = filtered.filter(d=>d.stage!=="Lost").reduce((s,d)=>s+(parseFloat(d.value)||0),0);
@@ -237,6 +290,7 @@ export default function PipelinePage({ currentUser }) {
     if (!d.followUpDate) return false;
     const fd = d.followUpDate;
     if (fd === todayStr) return true;
+    // also check DD-MM-YYYY
     if (fd.includes("-") && fd.split("-")[0].length === 2) {
       const [day,mon,yr] = fd.split("-");
       return `${yr}-${mon}-${day}` === todayStr;
@@ -244,6 +298,22 @@ export default function PipelinePage({ currentUser }) {
     return false;
   });
   const setF = f => e => setDealForm(p => ({...p,[f]:e.target.value}));
+
+  // ── Breakdown by Lead Type / Party Type / Lead Status — uses the
+  // currently filtered set so it always matches what's on the board. ──
+  const leadTypeBreakdown = LEAD_TYPES.map(t => ({ key:t, count: filtered.filter(d=>d.leadType===t).length }));
+  const partyTypeBreakdown = PARTY_TYPES.map(t => ({ key:t, count: filtered.filter(d=>d.partyType===t).length }));
+  const statusBreakdown = LEAD_STATUSES.map(s => ({ key:s, count: filtered.filter(d=>d.leadStatus===s).length }));
+  const unsetPartyCount = filtered.filter(d=>!d.partyType).length;
+
+  function exportLabel() {
+    const parts = [];
+    if (filterSP !== "All") parts.push(filterSP.toLowerCase().replace(/\s+/g,"-"));
+    if (filterLeadType !== "All") parts.push(filterLeadType.toLowerCase());
+    if (filterPartyType !== "All") parts.push(filterPartyType.toLowerCase().replace(/[^a-z0-9]+/g,"-"));
+    if (filterStatus !== "All") parts.push(filterStatus.toLowerCase());
+    return parts.length ? parts.join("_") : "all";
+  }
 
   return (
     <div style={{display:"flex",flexDirection:"column",height:"100%",background:"#f8fafc"}}>
@@ -255,7 +325,6 @@ export default function PipelinePage({ currentUser }) {
             <h1 style={{fontSize:"18px",fontWeight:700,color:"#0f172a",margin:0}}>Pipeline</h1>
             <p style={{fontSize:"13px",color:"#64748b",margin:"2px 0 0"}}>
               <span style={{fontWeight:600,color:"#6366f1"}}>₹{totalValue.toLocaleString("en-IN")}</span> total · {filtered.length} deals
-              {!isAdmin && <span style={{marginLeft:"8px",color:"#94a3b8"}}>· {mySalesperson}'s pipeline</span>}
               {todayFollowUps.length > 0 && (
                 <span style={{marginLeft:"10px",background:"#fef3c7",color:"#92400e",fontSize:"11px",padding:"2px 8px",borderRadius:"20px",fontWeight:600}}>
                   📅 {todayFollowUps.length} follow-up{todayFollowUps.length>1?"s":""} today
@@ -264,19 +333,33 @@ export default function PipelinePage({ currentUser }) {
             </p>
           </div>
           <div style={{display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center"}}>
-            {/* Salesperson filter — ADMIN ONLY. Non-admins never see this dropdown,
-                so there's no way for them to browse other people's pipelines. */}
-            {isAdmin && (
-              <select className="input" style={{width:"160px"}} value={filterSP} onChange={e=>setFilterSP(e.target.value)}>
-                <option value="All">All salespersons</option>
-                <option value="Unassigned">Unassigned</option>
-                {salespersons.map(s=><option key={s.id}>{s.name}</option>)}
-              </select>
-            )}
-            <select className="input" style={{width:"120px"}} value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}>
+            <select className="input" style={{width:"150px"}} value={filterSP} onChange={e=>setFilterSP(e.target.value)}>
+              <option value="All">All salespersons</option>
+              <option value="Unassigned">Unassigned</option>
+              {salespersons.map(s=><option key={s.id}>{s.name}</option>)}
+            </select>
+            <select className="input" style={{width:"110px"}} value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}>
               <option value="All">All status</option>
               {LEAD_STATUSES.map(s=><option key={s}>{s}</option>)}
             </select>
+            <select className="input" style={{width:"110px"}} value={filterLeadType} onChange={e=>setFilterLeadType(e.target.value)}>
+              <option value="All">All lead type</option>
+              {LEAD_TYPES.map(t=><option key={t}>{t}</option>)}
+            </select>
+            <select className="input" style={{width:"160px"}} value={filterPartyType} onChange={e=>setFilterPartyType(e.target.value)}>
+              <option value="All">All party type</option>
+              {PARTY_TYPES.map(t=><option key={t}>{t}</option>)}
+            </select>
+            <button onClick={()=>setShowBreakdown(v=>!v)}
+              style={{display:"inline-flex",alignItems:"center",gap:"6px",padding:"7px 12px",borderRadius:"8px",border:"1px solid #e2e8f0",background:showBreakdown?"#eef2ff":"white",color:"#6366f1",fontSize:"13px",fontWeight:600,cursor:"pointer"}}>
+              <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"/></svg>
+              Breakdown
+            </button>
+            <button onClick={()=>exportPipelineCSV(filtered, exportLabel())}
+              style={{display:"inline-flex",alignItems:"center",gap:"6px",padding:"7px 12px",borderRadius:"8px",border:"1px solid #16a34a",background:"#f0fdf4",color:"#16a34a",fontSize:"13px",fontWeight:600,cursor:"pointer"}}>
+              <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+              Export
+            </button>
             <button className="btn btn-primary" onClick={openAdd} style={{background:"linear-gradient(135deg,#6366f1,#8b5cf6)",border:"none"}}>
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>
               Add deal
@@ -284,6 +367,60 @@ export default function PipelinePage({ currentUser }) {
           </div>
         </div>
       </div>
+
+      {/* Breakdown panel — list + counts for Lead Type / Party Type / Status */}
+      {showBreakdown && (
+        <div style={{background:"white",borderBottom:"1px solid #e2e8f0",padding:"16px 24px"}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"16px"}}>
+            <div>
+              <p style={{fontSize:"11px",fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.05em",margin:"0 0 8px"}}>Lead type</p>
+              <div style={{display:"flex",flexDirection:"column",gap:"4px"}}>
+                {leadTypeBreakdown.map(b=>(
+                  <button key={b.key} onClick={()=>setFilterLeadType(filterLeadType===b.key?"All":b.key)}
+                    style={{display:"flex",justifyContent:"space-between",padding:"6px 10px",borderRadius:"6px",border:"none",cursor:"pointer",background:filterLeadType===b.key?"#eef2ff":"#f8fafc",fontSize:"12px"}}>
+                    <span style={{color:"#374151",fontWeight:500}}>{b.key}</span>
+                    <span style={{color:"#6366f1",fontWeight:700}}>{b.count}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p style={{fontSize:"11px",fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.05em",margin:"0 0 8px"}}>Party type</p>
+              <div style={{display:"flex",flexDirection:"column",gap:"4px"}}>
+                {partyTypeBreakdown.map(b=>(
+                  <button key={b.key} onClick={()=>setFilterPartyType(filterPartyType===b.key?"All":b.key)}
+                    style={{display:"flex",justifyContent:"space-between",padding:"6px 10px",borderRadius:"6px",border:"none",cursor:"pointer",background:filterPartyType===b.key?"#eef2ff":"#f8fafc",fontSize:"12px"}}>
+                    <span style={{color:"#374151",fontWeight:500}}>{b.key}</span>
+                    <span style={{color:"#6366f1",fontWeight:700}}>{b.count}</span>
+                  </button>
+                ))}
+                {unsetPartyCount > 0 && (
+                  <div style={{display:"flex",justifyContent:"space-between",padding:"6px 10px",fontSize:"12px"}}>
+                    <span style={{color:"#94a3b8"}}>Not set</span>
+                    <span style={{color:"#94a3b8",fontWeight:700}}>{unsetPartyCount}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div>
+              <p style={{fontSize:"11px",fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.05em",margin:"0 0 8px"}}>Lead status</p>
+              <div style={{display:"flex",flexDirection:"column",gap:"4px"}}>
+                {statusBreakdown.map(b=>{
+                  const ss = STATUS_STYLE[b.key];
+                  return (
+                    <button key={b.key} onClick={()=>setFilterStatus(filterStatus===b.key?"All":b.key)}
+                      style={{display:"flex",justifyContent:"space-between",padding:"6px 10px",borderRadius:"6px",border:"none",cursor:"pointer",background:filterStatus===b.key?ss.bg:"#f8fafc",fontSize:"12px"}}>
+                      <span style={{color:filterStatus===b.key?ss.color:"#374151",fontWeight:500}}>{b.key}</span>
+                      <span style={{color:filterStatus===b.key?ss.color:"#6366f1",fontWeight:700}}>{b.count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+          <p style={{fontSize:"11px",color:"#94a3b8",margin:"12px 0 0"}}>Click a row to filter the board by that category. Export uses whatever filters are currently active.</p>
+        </div>
+      )}
 
       {/* Stage summary bar */}
       <div style={{display:"flex",gap:"1px",background:"#e2e8f0",borderBottom:"1px solid #e2e8f0"}}>
@@ -313,6 +450,7 @@ export default function PipelinePage({ currentUser }) {
               <div key={stage} style={{flexShrink:0,width:"230px",minHeight:"200px"}}
                 onDragOver={e=>e.preventDefault()} onDrop={()=>onDrop(stage)}>
 
+                {/* Column header */}
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"10px",padding:"0 2px"}}>
                   <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
                     <div style={{width:"10px",height:"10px",borderRadius:"50%",background:cfg.border,flexShrink:0}}/>
@@ -321,82 +459,98 @@ export default function PipelinePage({ currentUser }) {
                   <span style={{fontSize:"11px",fontWeight:700,color:"white",background:cfg.badge,borderRadius:"20px",padding:"1px 8px"}}>{stageDeals.length}</span>
                 </div>
 
-                <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
+                {/* Cards */}
+                <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
                   {stageDeals.map(deal => {
                     const ss = STATUS_STYLE[deal.leadStatus] || STATUS_STYLE.Cold;
                     const overdue = isOverdue(deal.followUpDate);
+                    const menuOpen = openMenuId === deal.id;
                     return (
                       <div key={deal.id} className="deal-card" draggable onDragStart={()=>onDragStart(deal)}
-                        style={{borderLeft:`3px solid ${cfg.border}`}}>
+                        onClick={()=>openEdit(deal)}
+                        style={{borderLeft:`3px solid ${cfg.border}`,padding:"10px 12px",cursor:"pointer",position:"relative"}}>
 
-                        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"6px",marginBottom:"6px"}}>
-                          <p style={{fontSize:"13px",fontWeight:600,color:"#0f172a",margin:0,lineHeight:1.3}}>{deal.title}</p>
+                        {/* Status badge + three-dot menu, top right */}
+                        <div style={{position:"absolute",top:"8px",right:"8px",display:"flex",alignItems:"center",gap:"4px"}} data-deal-menu>
                           {deal.leadStatus && (
-                            <span style={{fontSize:"10px",fontWeight:700,background:ss.bg,color:ss.color,padding:"2px 7px",borderRadius:"20px",flexShrink:0,display:"flex",alignItems:"center",gap:"3px"}}>
-                              <span style={{width:"5px",height:"5px",borderRadius:"50%",background:ss.dot,display:"inline-block"}}/>
+                            <span style={{fontSize:"9px",fontWeight:700,background:ss.bg,color:ss.color,padding:"2px 6px",borderRadius:"20px",display:"flex",alignItems:"center",gap:"3px"}}>
+                              <span style={{width:"4px",height:"4px",borderRadius:"50%",background:ss.dot,display:"inline-block"}}/>
                               {deal.leadStatus}
                             </span>
                           )}
+                          <button onClick={(e)=>{e.stopPropagation(); setOpenMenuId(menuOpen?null:deal.id);}}
+                            style={{width:"20px",height:"20px",borderRadius:"6px",border:"none",background:menuOpen?"#e0e7ff":"transparent",color:"#94a3b8",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                            <svg width="13" height="13" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="6" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="18" r="1.8"/></svg>
+                          </button>
+
+                          {menuOpen && (
+                            <div onClick={e=>e.stopPropagation()}
+                              style={{position:"absolute",top:"24px",right:0,width:"150px",background:"white",border:"1px solid #e2e8f0",borderRadius:"10px",boxShadow:"0 10px 30px rgba(0,0,0,0.15)",zIndex:30,overflow:"hidden"}}>
+                              <button onClick={()=>{setOpenMenuId(null);openEdit(deal);}}
+                                style={{width:"100%",textAlign:"left",padding:"8px 12px",border:"none",background:"none",cursor:"pointer",fontSize:"12px",color:"#374151",display:"flex",alignItems:"center",gap:"8px"}}
+                                onMouseOver={e=>e.currentTarget.style.background="#f8fafc"} onMouseOut={e=>e.currentTarget.style.background="none"}>
+                                <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                                Edit
+                              </button>
+                              <button onClick={()=>{setOpenMenuId(null);openActModal(deal);}}
+                                style={{width:"100%",textAlign:"left",padding:"8px 12px",border:"none",background:"none",cursor:"pointer",fontSize:"12px",color:"#374151",display:"flex",alignItems:"center",gap:"8px"}}
+                                onMouseOver={e=>e.currentTarget.style.background="#f8fafc"} onMouseOut={e=>e.currentTarget.style.background="none"}>
+                                <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                                Activity
+                              </button>
+                              {deal.phone && (
+                                <a href={`tel:${deal.phone.replace(/\D/g,"")}`} onClick={()=>setOpenMenuId(null)}
+                                  style={{width:"100%",textAlign:"left",padding:"8px 12px",border:"none",background:"none",cursor:"pointer",fontSize:"12px",color:"#374151",display:"flex",alignItems:"center",gap:"8px",textDecoration:"none"}}
+                                  onMouseOver={e=>e.currentTarget.style.background="#f8fafc"} onMouseOut={e=>e.currentTarget.style.background="none"}>
+                                  <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
+                                  Call
+                                </a>
+                              )}
+                              {deal.phone && (
+                                <a href={`https://wa.me/91${deal.phone.replace(/\D/g,"")}`} target="_blank" rel="noreferrer" onClick={()=>setOpenMenuId(null)}
+                                  style={{width:"100%",textAlign:"left",padding:"8px 12px",border:"none",background:"none",cursor:"pointer",fontSize:"12px",color:"#16a34a",display:"flex",alignItems:"center",gap:"8px",textDecoration:"none"}}
+                                  onMouseOver={e=>e.currentTarget.style.background="#f0fdf4"} onMouseOut={e=>e.currentTarget.style.background="none"}>
+                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                                  WhatsApp
+                                </a>
+                              )}
+                              <div style={{borderTop:"1px solid #f1f5f9"}}/>
+                              <button onClick={()=>{setOpenMenuId(null);remove(deal.id);}}
+                                style={{width:"100%",textAlign:"left",padding:"8px 12px",border:"none",background:"none",cursor:"pointer",fontSize:"12px",color:"#ef4444",display:"flex",alignItems:"center",gap:"8px"}}
+                                onMouseOver={e=>e.currentTarget.style.background="#fef2f2"} onMouseOut={e=>e.currentTarget.style.background="none"}>
+                                <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M4 7h16"/></svg>
+                                Delete
+                              </button>
+                            </div>
+                          )}
                         </div>
 
-                        <div style={{display:"flex",alignItems:"center",gap:"6px",marginBottom:"4px"}}>
-                          {deal.contact && <Avatar name={deal.contact} size={20}/>}
-                          <div style={{minWidth:0}}>
-                            {deal.contact && <p style={{fontSize:"11px",fontWeight:500,color:"#374151",margin:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{deal.contact}</p>}
-                            {deal.company && <p style={{fontSize:"10px",color:"#94a3b8",margin:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{deal.company}</p>}
+                        {/* Contact + company, one line each */}
+                        <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"4px",paddingRight:"56px"}}>
+                          <Avatar name={deal.contact || deal.title} size={22}/>
+                          <div style={{minWidth:0,flex:1}}>
+                            <p style={{fontSize:"12px",fontWeight:600,color:"#0f172a",margin:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{deal.contact || deal.title}</p>
+                            <p style={{fontSize:"10px",color:"#94a3b8",margin:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                              {deal.company}{deal.partyType && (deal.company ? ` · ${deal.partyType}` : deal.partyType)}
+                            </p>
                           </div>
                         </div>
 
-                        <div style={{display:"flex",flexWrap:"wrap",gap:"4px",marginBottom:"6px"}}>
-                          {deal.partyType && <span style={{fontSize:"10px",background:"#ede9fe",color:"#6d28d9",padding:"1px 6px",borderRadius:"4px",fontWeight:500}}>{deal.partyType}</span>}
-                          {deal.salesperson && deal.salesperson!=="Unassigned" && <span style={{fontSize:"10px",background:"#e0f2fe",color:"#0369a1",padding:"1px 6px",borderRadius:"4px",fontWeight:500}}>👤 {deal.salesperson}</span>}
-                        </div>
-
-                        {deal.followUpDate && (
-                          <div style={{fontSize:"10px",padding:"3px 7px",borderRadius:"6px",marginBottom:"6px",fontWeight:600,display:"inline-flex",alignItems:"center",gap:"4px",
-                            background:overdue?"#fee2e2":"#f0fdf4",color:overdue?"#b91c1c":"#15803d"}}>
-                            📅 {overdue?"OVERDUE — ":""}{formatDate(deal.followUpDate)}
+                        {/* Value + follow-up, one row */}
+                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:"8px"}}>
+                          <span style={{fontSize:"12px",fontWeight:600,color: deal.value ? "#6366f1" : "#cbd5e1"}}>
+                            {deal.value ? `₹${parseFloat(deal.value).toLocaleString("en-IN")}` : "No value"}
+                          </span>
+                          <div style={{display:"flex",alignItems:"center",gap:"6px",flexShrink:0}}>
+                            {deal.salesperson && deal.salesperson!=="Unassigned" && (
+                              <span style={{fontSize:"9px",color:"#0369a1"}}>👤 {deal.salesperson}</span>
+                            )}
+                            {deal.followUpDate && (
+                              <span style={{fontSize:"9px",fontWeight:600,color:overdue?"#dc2626":"#15803d"}}>
+                                {overdue?"⚠ ":"📅 "}{formatDate(deal.followUpDate)}
+                              </span>
+                            )}
                           </div>
-                        )}
-
-                        {deal.value && (
-                          <p style={{fontSize:"14px",fontWeight:700,color:"#6366f1",margin:"0 0 6px"}}>₹{parseFloat(deal.value).toLocaleString("en-IN")}</p>
-                        )}
-
-                        <div style={{display:"flex",gap:"4px",borderTop:"1px solid #f1f5f9",paddingTop:"6px",alignItems:"center"}}>
-                          <button onClick={()=>openEdit(deal)} style={{flex:1,fontSize:"11px",padding:"4px",borderRadius:"6px",border:"none",background:"#f8fafc",color:"#64748b",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:"3px",fontWeight:500}}
-                            onMouseOver={e=>e.currentTarget.style.background="#e0e7ff"} onMouseOut={e=>e.currentTarget.style.background="#f8fafc"}>
-                            <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-                            Edit
-                          </button>
-                          <button onClick={()=>openActModal(deal)} style={{flex:1,fontSize:"11px",padding:"4px",borderRadius:"6px",border:"none",background:"#f8fafc",color:"#64748b",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:"3px",fontWeight:500}}
-                            onMouseOver={e=>e.currentTarget.style.background="#dcfce7"} onMouseOut={e=>e.currentTarget.style.background="#f8fafc"}>
-                            <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
-                            Activity
-                          </button>
-                          {deal.phone && (
-                            <a href={`tel:${deal.phone.replace(/\D/g,"")}`}
-                              title={`Call ${deal.contact} — ${deal.phone}`}
-                              style={{padding:"4px 6px",borderRadius:"6px",border:"none",background:(() => { const d=deal.followUpDate; if(!d) return "#f8fafc"; const fd=d.includes("-")&&d.split("-")[0].length===2?new Date(`${d.split("-")[2]}-${d.split("-")[1]}-${d.split("-")[0]}`):new Date(d); const today=new Date(new Date().toDateString()); const tom=new Date(today); tom.setDate(today.getDate()+1); if(fd<today) return "#fee2e2"; if(fd>=today&&fd<tom) return "#dcfce7"; return "#f8fafc"; })(),color:(() => { const d=deal.followUpDate; if(!d) return "#94a3b8"; const fd=d.includes("-")&&d.split("-")[0].length===2?new Date(`${d.split("-")[2]}-${d.split("-")[1]}-${d.split("-")[0]}`):new Date(d); const today=new Date(new Date().toDateString()); const tom=new Date(today); tom.setDate(today.getDate()+1); if(fd<today) return "#dc2626"; if(fd>=today&&fd<tom) return "#16a34a"; return "#94a3b8"; })(),cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",textDecoration:"none",transition:"all 0.15s"}}
-                              onMouseOver={e=>{e.currentTarget.style.background="#dbeafe";e.currentTarget.style.color="#2563eb";}} 
-                              onMouseOut={e=>{e.currentTarget.style.background=(() => { const d=deal.followUpDate; if(!d) return "#f8fafc"; const fd=d.includes("-")&&d.split("-")[0].length===2?new Date(`${d.split("-")[2]}-${d.split("-")[1]}-${d.split("-")[0]}`):new Date(d); const today=new Date(new Date().toDateString()); const tom=new Date(today); tom.setDate(today.getDate()+1); if(fd<today) return "#fee2e2"; if(fd>=today&&fd<tom) return "#dcfce7"; return "#f8fafc"; })();e.currentTarget.style.color=(() => { const d=deal.followUpDate; if(!d) return "#94a3b8"; const fd=d.includes("-")&&d.split("-")[0].length===2?new Date(`${d.split("-")[2]}-${d.split("-")[1]}-${d.split("-")[0]}`):new Date(d); const today=new Date(new Date().toDateString()); const tom=new Date(today); tom.setDate(today.getDate()+1); if(fd<today) return "#dc2626"; if(fd>=today&&fd<tom) return "#16a34a"; return "#94a3b8"; })();}}>
-                              <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
-                              </svg>
-                            </a>
-                          )}
-                          {deal.phone && (
-                            <a href={`https://wa.me/91${deal.phone.replace(/\D/g,"")}`} target="_blank" rel="noreferrer"
-                              className="btn-whatsapp" title={`WhatsApp ${deal.contact}`}>
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-                              </svg>
-                            </a>
-                          )}
-                          <button onClick={()=>remove(deal.id)} style={{padding:"4px 5px",borderRadius:"6px",border:"none",background:"#f8fafc",color:"#cbd5e1",cursor:"pointer"}}
-                            onMouseOver={e=>{e.currentTarget.style.background="#fee2e2";e.currentTarget.style.color="#ef4444"}} onMouseOut={e=>{e.currentTarget.style.background="#f8fafc";e.currentTarget.style.color="#cbd5e1"}}>
-                            <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M4 7h16"/></svg>
-                          </button>
                         </div>
                       </div>
                     );
@@ -418,6 +572,7 @@ export default function PipelinePage({ currentUser }) {
         <Modal title={editDeal?"Edit deal":"Add deal"} onClose={()=>setShowDealModal(false)}>
           <div style={{maxHeight:"70vh",overflowY:"auto",paddingRight:"4px"}}>
             <div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
+              {/* Contact search */}
               <div style={{position:"relative"}}>
                 <label style={{display:"block",fontSize:"11px",fontWeight:600,color:"#374151",marginBottom:"4px"}}>
                   Search contact * <span style={{color:"#94a3b8",fontWeight:400}}>(name or phone)</span>
@@ -443,18 +598,10 @@ export default function PipelinePage({ currentUser }) {
                   </div>
                 )}
                 {dealForm.contact && (
-                  <p style={{fontSize:"11px",color:"#059669",marginTop:"4px",fontWeight:500}}>✅ {dealForm.contact} — {dealForm.company||"No company"}</p>
-                )}
-                {contactSearch && !dealForm.contactId && contactResults.length===0 && (
-                  <p style={{fontSize:"11px",color:"#dc2626",marginTop:"4px",fontWeight:500}}>
-                    ⚠️ No contact found. Add it in the Contacts page first.
+                  <p style={{fontSize:"11px",color:"#059669",marginTop:"4px",fontWeight:500}}>
+                    ✅ Deal name: <strong>{buildDealTitle(dealForm.contact, dealForm.company)}</strong>
                   </p>
                 )}
-              </div>
-
-              <div>
-                <label style={{display:"block",fontSize:"11px",fontWeight:600,color:"#374151",marginBottom:"4px"}}>Deal title *</label>
-                <input className="input" placeholder="Annual Supply Contract" value={dealForm.title} onChange={setF("title")} />
               </div>
 
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px"}}>
@@ -508,19 +655,11 @@ export default function PipelinePage({ currentUser }) {
               </div>
 
               <div>
-                <label style={{display:"block",fontSize:"11px",fontWeight:600,color:"#374151",marginBottom:"4px"}}>
-                  Assigned salesperson {!isAdmin && <span style={{color:"#94a3b8",fontWeight:400}}>(locked to you)</span>}
-                </label>
-                {isAdmin ? (
-                  <select className="input" value={dealForm.salesperson} onChange={setF("salesperson")}>
-                    <option>Unassigned</option>
-                    {salespersons.map(s=><option key={s.id}>{s.name}</option>)}
-                  </select>
-                ) : (
-                  <div className="input" style={{background:"#f8fafc",color:"#374151",fontWeight:600,cursor:"not-allowed"}}>
-                    {mySalesperson}
-                  </div>
-                )}
+                <label style={{display:"block",fontSize:"11px",fontWeight:600,color:"#374151",marginBottom:"4px"}}>Assigned salesperson</label>
+                <select className="input" value={dealForm.salesperson} onChange={setF("salesperson")}>
+                  <option>Unassigned</option>
+                  {salespersons.map(s=><option key={s.id}>{s.name}</option>)}
+                </select>
               </div>
 
               <div>
@@ -574,6 +713,8 @@ export default function PipelinePage({ currentUser }) {
               {saving?"Saving...":"Log activity"}
             </button>
 
+            {/* Lead-wise activity history — every past entry for THIS deal,
+                newest first, so it reads as a timeline of what happened and when. */}
             <div style={{borderTop:"1px solid #f1f5f9",paddingTop:"12px"}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"8px"}}>
                 <p style={{fontSize:"11px",fontWeight:700,color:"#64748b",margin:0,textTransform:"uppercase",letterSpacing:"0.05em"}}>
@@ -589,6 +730,7 @@ export default function PipelinePage({ currentUser }) {
                 <div style={{display:"flex",flexDirection:"column",maxHeight:"220px",overflowY:"auto"}}>
                   {dealActivities.map((a,i)=>(
                     <div key={a.id} style={{display:"flex",gap:"10px",position:"relative",paddingBottom: i===dealActivities.length-1 ? 0 : "12px"}}>
+                      {/* Timeline rail */}
                       <div style={{display:"flex",flexDirection:"column",alignItems:"center",flexShrink:0}}>
                         <div style={{width:"22px",height:"22px",borderRadius:"50%",background:"#eef2ff",color:"#6366f1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"11px",flexShrink:0}}>
                           {ACT_TYPE_ICON[a.type] || "•"}
@@ -597,6 +739,7 @@ export default function PipelinePage({ currentUser }) {
                           <div style={{flex:1,width:"2px",background:"#e2e8f0",marginTop:"2px"}}/>
                         )}
                       </div>
+                      {/* Entry content */}
                       <div style={{flex:1,paddingBottom:"2px"}}>
                         <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:"8px"}}>
                           <p style={{fontSize:"12px",fontWeight:700,color:"#0f172a",margin:0}}>{a.type}: {a.subject}</p>
