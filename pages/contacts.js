@@ -19,6 +19,8 @@ const EMPTY_FORM = {
 };
 
 export default function ContactsPage({ currentUser }) {
+ const isAdmin = currentUser?.role === "admin";
+  const mySalesperson = currentUser?.salesperson || "Unassigned";
   const [contacts, setContacts] = useState([]);
   const [salespersons, setSalespersons] = useState([]);
   const [search, setSearch] = useState("");
