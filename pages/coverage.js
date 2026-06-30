@@ -5,19 +5,40 @@ import { getDeals, getContacts, getActivities, getSalespersons } from "../lib/fi
 const STALE_DAYS = 30;
 const REFERENCE_READY_MIN = 2;
 
+function exportCoverageCSV(rows, filterSP) {
+  if (rows.length === 0) return toast.error("Nothing to export");
+  const csvRows = [
+    ["State","City","Pincode","Contacts","References","Active leads","Won","Covered by"],
+    ...rows.map(r => [
+      r.state||"", r.city||"", r.pincode||"", r.contactCount, r.referenceCount,
+      r.activeCount, r.wonCount, r.owners.join("; ")
+    ])
+  ];
+  const csv = csvRows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  const label = filterSP && filterSP !== "All" ? filterSP.toLowerCase().replace(/\s+/g,"-") : "all";
+  a.download = `coverage-${label}-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  toast.success("Exported ✅");
+}
+
 export default function CoveragePage({ currentUser }) {
   const [deals, setDeals] = useState([]);
   const [contacts, setContacts] = useState([]);
   const [activities, setActivities] = useState([]);
+  const [salespersons, setSalespersons] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [filterSP, setFilterSP] = useState("All");
   const [expandedArea, setExpandedArea] = useState(null);
 
   useEffect(() => {
     // Unfiltered on purpose — every salesperson needs to see every other
     // salesperson's contacts/leads here, that's the whole point of this page.
     Promise.all([getDeals(null), getContacts(null), getActivities(null), getSalespersons()])
-      .then(([d,c,a]) => { setDeals(d); setContacts(c); setActivities(a); })
+      .then(([d,c,a,s]) => { setDeals(d); setContacts(c); setActivities(a); setSalespersons(s); })
       .catch((e) => { console.error(e); toast.error("Could not load coverage data"); })
       .finally(() => setLoading(false));
   }, []);
@@ -77,11 +98,12 @@ export default function CoveragePage({ currentUser }) {
     areaMap[key].contacts.push(c);
   });
 
-  const allAreas = Object.values(areaMap).map(area => {
+  let allAreas = Object.values(areaMap).map(area => {
     const referenceContacts = area.contacts.filter(c => c.isCredibleReference);
     const activeCount = area.contacts.reduce((s,c)=>s+c.activeDealCount,0);
     const wonCount = area.contacts.reduce((s,c)=>s+c.wonDealCount,0);
     const owners = [...new Set(area.contacts.map(c => c.salesperson).filter(s => s && s !== "Unassigned"))];
+    const matchesFilterSP = filterSP !== "All" && area.contacts.some(c => c.salesperson === filterSP);
     const lastActivityDate = area.contacts.reduce((latest, c) => {
       if (!c.lastActivity) return latest;
       if (!latest || c.lastActivity > latest) return c.lastActivity;
@@ -95,12 +117,19 @@ export default function CoveragePage({ currentUser }) {
       activeCount,
       wonCount,
       owners,
+      matchesFilterSP,
       lastActivityDate,
       daysSinceActivity,
       referenceReady: referenceContacts.length >= REFERENCE_READY_MIN,
       isStale: daysSinceActivity !== null && daysSinceActivity >= STALE_DAYS,
     };
   }).sort((a,b) => b.contactCount - a.contactCount);
+
+  // When a salesperson filter is set, bring their areas to the top —
+  // full area context stays visible, nothing is hidden.
+  if (filterSP !== "All") {
+    allAreas = [...allAreas].sort((a,b) => (b.matchesFilterSP?1:0) - (a.matchesFilterSP?1:0));
+  }
 
   const query = search.trim().toLowerCase();
   const matchedAreas = query
@@ -132,22 +161,40 @@ export default function CoveragePage({ currentUser }) {
 
   return (
     <div className="p-6 max-w-6xl">
-      <div className="mb-4">
-        <h1 className="text-xl font-bold text-gray-900">Coverage</h1>
-        <p className="text-sm text-gray-500">Find existing customers near a new lead, and who to ask for a reference.</p>
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">Coverage</h1>
+          <p className="text-sm text-gray-500">Find existing customers near a new lead, and who to ask for a reference.</p>
+        </div>
+        <button onClick={()=>exportCoverageCSV(matchedAreas, filterSP)}
+          style={{display:"inline-flex",alignItems:"center",gap:"6px",padding:"7px 14px",borderRadius:"8px",border:"1px solid #16a34a",background:"#f0fdf4",color:"#16a34a",fontSize:"13px",fontWeight:600,cursor:"pointer",transition:"all 0.15s"}}
+          onMouseOver={e=>{e.currentTarget.style.background="#16a34a";e.currentTarget.style.color="white";}}
+          onMouseOut={e=>{e.currentTarget.style.background="#f0fdf4";e.currentTarget.style.color="#16a34a";}}>
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+          </svg>
+          Export Excel
+        </button>
       </div>
 
-      {/* Search */}
+      {/* Search + salesperson filter */}
       <div className="card p-4 mb-4">
-        <div className="relative">
-          <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-          </svg>
-          <input className="input pl-9" placeholder="Search pincode, city, or state — e.g. 395003 or Surat"
-            value={search} onChange={e=>{setSearch(e.target.value); setExpandedArea(null);}} />
+        <div className="flex gap-3 flex-wrap items-center">
+          <div className="relative flex-1 min-w-52">
+            <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+            <input className="input pl-9" placeholder="Search pincode, city, or state — e.g. 395003 or Surat"
+              value={search} onChange={e=>{setSearch(e.target.value); setExpandedArea(null);}} />
+          </div>
+          <select className="input w-48" value={filterSP} onChange={e=>{setFilterSP(e.target.value); setExpandedArea(null);}}>
+            <option value="All">All salespersons</option>
+            {salespersons.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+          </select>
         </div>
         <p className="text-xs text-gray-400 mt-2">
           Shared across the whole team — everyone can see everyone's contacts here so you know who to ask for a reference. "Reference-ready" means {REFERENCE_READY_MIN}+ contacts in the area have at least one logged activity.
+          {filterSP !== "All" && " Areas with this salesperson's contacts are sorted to the top."}
         </p>
       </div>
 
@@ -197,8 +244,11 @@ export default function CoveragePage({ currentUser }) {
                   const expanded = expandedArea === key;
                   return (
                     <React.Fragment key={key}>
-                      <tr className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer" onClick={()=>setExpandedArea(expanded?null:key)}>
-                        <td className="px-4 py-3 font-medium text-gray-900">{area.city}</td>
+                      <tr className={`border-b border-gray-50 hover:bg-gray-50 cursor-pointer ${area.matchesFilterSP ? "bg-indigo-50/40" : ""}`} onClick={()=>setExpandedArea(expanded?null:key)}>
+                        <td className="px-4 py-3 font-medium text-gray-900">
+                          {area.city}
+                          {area.matchesFilterSP && <span className="ml-2 text-xs bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded">★</span>}
+                        </td>
                         <td className="px-4 py-3 text-gray-500">{area.state}</td>
                         <td className="px-4 py-3 text-gray-500">{area.pincode}</td>
                         <td className="px-4 py-3 text-gray-700">{area.contactCount}</td>
@@ -224,24 +274,30 @@ export default function CoveragePage({ currentUser }) {
                         <tr className="bg-gray-50">
                           <td colSpan={9} className="px-4 py-3 bg-gray-50">
                             <div className="space-y-1.5">
-                              {area.contacts.map(c => (
-                                <div key={c.id} className="flex items-center justify-between bg-white rounded-lg px-3 py-2 text-xs border border-gray-100">
-                                  <div>
-                                    <span className="font-medium text-gray-800">{c.name}</span>
-                                    {c.company && <span className="text-gray-400"> · {c.company}</span>}
-                                    {c.phone && <span className="text-gray-400"> · {c.phone}</span>}
+                              {area.contacts
+                                .slice()
+                                .sort((a,b) => (filterSP!=="All" ? (b.salesperson===filterSP?1:0)-(a.salesperson===filterSP?1:0) : 0))
+                                .map(c => {
+                                const isMine = filterSP !== "All" && c.salesperson === filterSP;
+                                return (
+                                  <div key={c.id} className={`flex items-center justify-between rounded-lg px-3 py-2 text-xs border ${isMine ? "bg-indigo-50 border-indigo-200" : "bg-white border-gray-100"}`}>
+                                    <div>
+                                      <span className="font-medium text-gray-800">{c.name}</span>
+                                      {c.company && <span className="text-gray-400"> · {c.company}</span>}
+                                      {c.phone && <span className="text-gray-400"> · {c.phone}</span>}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      {c.salesperson && c.salesperson !== "Unassigned" && (
+                                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${isMine ? "bg-indigo-100 text-indigo-700" : "bg-purple-50 text-purple-700"}`}>👤 {c.salesperson}</span>
+                                      )}
+                                      {c.wonDealCount > 0 && <span className="text-green-600 font-medium">Won customer</span>}
+                                      {c.isCredibleReference
+                                        ? <span className="badge bg-green-50 text-green-700">Reference ✓</span>
+                                        : <span className="badge bg-gray-50 text-gray-400">No activity</span>}
+                                    </div>
                                   </div>
-                                  <div className="flex items-center gap-2">
-                                    {c.salesperson && c.salesperson !== "Unassigned" && (
-                                      <span className="text-xs bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full font-medium">👤 {c.salesperson}</span>
-                                    )}
-                                    {c.wonDealCount > 0 && <span className="text-green-600 font-medium">Won customer</span>}
-                                    {c.isCredibleReference
-                                      ? <span className="badge bg-green-50 text-green-700">Reference ✓</span>
-                                      : <span className="badge bg-gray-50 text-gray-400">No activity</span>}
-                                  </div>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           </td>
                         </tr>
@@ -263,7 +319,7 @@ export default function CoveragePage({ currentUser }) {
         ) : (
           <div className="flex flex-wrap gap-2">
             {referenceReadyAreas.slice(0,30).map(a => (
-              <span key={`${a.state}|${a.city}|${a.pincode}`} className="text-xs bg-green-50 text-green-700 border border-green-100 px-3 py-1.5 rounded-full font-medium">
+              <span key={`${a.state}|${a.city}|${a.pincode}`} className={`text-xs px-3 py-1.5 rounded-full font-medium border ${a.matchesFilterSP ? "bg-indigo-50 text-indigo-700 border-indigo-200" : "bg-green-50 text-green-700 border-green-100"}`}>
                 {a.city} ({a.pincode}) — {a.referenceCount} contacts{a.owners.length > 0 && ` · ${a.owners[0]}${a.owners.length>1?` +${a.owners.length-1}`:""}`}
               </span>
             ))}
