@@ -100,6 +100,7 @@ export default function PipelinePage({ currentUser }) {
   const [saving, setSaving] = useState(false);
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [openMenuId, setOpenMenuId] = useState(null);
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const dragDeal = useRef(null);
   const dragOver = useRef(null);
 
@@ -107,7 +108,7 @@ export default function PipelinePage({ currentUser }) {
 
   useEffect(() => {
     function handleClickOutside(e) {
-      if (openMenuId && !e.target.closest("[data-deal-menu]")) {
+      if (openMenuId && !e.target.closest("[data-deal-menu]") && !e.target.closest("[data-deal-menu-popup]")) {
         setOpenMenuId(null);
       }
     }
@@ -478,51 +479,16 @@ export default function PipelinePage({ currentUser }) {
                               {deal.leadStatus}
                             </span>
                           )}
-                          <button onClick={(e)=>{e.stopPropagation(); setOpenMenuId(menuOpen?null:deal.id);}}
+                          <button onClick={(e)=>{
+                              e.stopPropagation();
+                              if (menuOpen) { setOpenMenuId(null); return; }
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              setMenuPos({ top: rect.bottom + 4, left: Math.min(rect.right - 150, window.innerWidth - 158) });
+                              setOpenMenuId(deal.id);
+                            }}
                             style={{width:"20px",height:"20px",borderRadius:"6px",border:"none",background:menuOpen?"#e0e7ff":"transparent",color:"#94a3b8",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                             <svg width="13" height="13" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="6" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="18" r="1.8"/></svg>
                           </button>
-
-                          {menuOpen && (
-                            <div onClick={e=>e.stopPropagation()}
-                              style={{position:"absolute",top:"24px",right:0,width:"150px",background:"white",border:"1px solid #e2e8f0",borderRadius:"10px",boxShadow:"0 10px 30px rgba(0,0,0,0.15)",zIndex:30,overflow:"hidden"}}>
-                              <button onClick={()=>{setOpenMenuId(null);openEdit(deal);}}
-                                style={{width:"100%",textAlign:"left",padding:"8px 12px",border:"none",background:"none",cursor:"pointer",fontSize:"12px",color:"#374151",display:"flex",alignItems:"center",gap:"8px"}}
-                                onMouseOver={e=>e.currentTarget.style.background="#f8fafc"} onMouseOut={e=>e.currentTarget.style.background="none"}>
-                                <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-                                Edit
-                              </button>
-                              <button onClick={()=>{setOpenMenuId(null);openActModal(deal);}}
-                                style={{width:"100%",textAlign:"left",padding:"8px 12px",border:"none",background:"none",cursor:"pointer",fontSize:"12px",color:"#374151",display:"flex",alignItems:"center",gap:"8px"}}
-                                onMouseOver={e=>e.currentTarget.style.background="#f8fafc"} onMouseOut={e=>e.currentTarget.style.background="none"}>
-                                <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
-                                Activity
-                              </button>
-                              {deal.phone && (
-                                <a href={`tel:${deal.phone.replace(/\D/g,"")}`} onClick={()=>setOpenMenuId(null)}
-                                  style={{width:"100%",textAlign:"left",padding:"8px 12px",border:"none",background:"none",cursor:"pointer",fontSize:"12px",color:"#374151",display:"flex",alignItems:"center",gap:"8px",textDecoration:"none"}}
-                                  onMouseOver={e=>e.currentTarget.style.background="#f8fafc"} onMouseOut={e=>e.currentTarget.style.background="none"}>
-                                  <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
-                                  Call
-                                </a>
-                              )}
-                              {deal.phone && (
-                                <a href={`https://wa.me/91${deal.phone.replace(/\D/g,"")}`} target="_blank" rel="noreferrer" onClick={()=>setOpenMenuId(null)}
-                                  style={{width:"100%",textAlign:"left",padding:"8px 12px",border:"none",background:"none",cursor:"pointer",fontSize:"12px",color:"#16a34a",display:"flex",alignItems:"center",gap:"8px",textDecoration:"none"}}
-                                  onMouseOver={e=>e.currentTarget.style.background="#f0fdf4"} onMouseOut={e=>e.currentTarget.style.background="none"}>
-                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-                                  WhatsApp
-                                </a>
-                              )}
-                              <div style={{borderTop:"1px solid #f1f5f9"}}/>
-                              <button onClick={()=>{setOpenMenuId(null);remove(deal.id);}}
-                                style={{width:"100%",textAlign:"left",padding:"8px 12px",border:"none",background:"none",cursor:"pointer",fontSize:"12px",color:"#ef4444",display:"flex",alignItems:"center",gap:"8px"}}
-                                onMouseOver={e=>e.currentTarget.style.background="#fef2f2"} onMouseOut={e=>e.currentTarget.style.background="none"}>
-                                <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M4 7h16"/></svg>
-                                Delete
-                              </button>
-                            </div>
-                          )}
                         </div>
 
                         {/* Contact + company, one line each */}
@@ -566,6 +532,54 @@ export default function PipelinePage({ currentUser }) {
           })}
         </div>
       )}
+
+      {/* Card action menu — rendered once at the page level as position:fixed
+          so it always floats above every card, instead of getting clipped
+          by neighboring cards when positioned relative to its own card. */}
+      {openMenuId && (() => {
+        const menuDeal = deals.find(d => d.id === openMenuId);
+        if (!menuDeal) return null;
+        return (
+          <div data-deal-menu-popup onClick={e=>e.stopPropagation()}
+            style={{position:"fixed",top:menuPos.top,left:menuPos.left,width:"150px",background:"white",border:"1px solid #e2e8f0",borderRadius:"10px",boxShadow:"0 10px 30px rgba(0,0,0,0.18)",zIndex:1000,overflow:"hidden"}}>
+            <button onClick={()=>{setOpenMenuId(null);openEdit(menuDeal);}}
+              style={{width:"100%",textAlign:"left",padding:"8px 12px",border:"none",background:"none",cursor:"pointer",fontSize:"12px",color:"#374151",display:"flex",alignItems:"center",gap:"8px"}}
+              onMouseOver={e=>e.currentTarget.style.background="#f8fafc"} onMouseOut={e=>e.currentTarget.style.background="none"}>
+              <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+              Edit
+            </button>
+            <button onClick={()=>{setOpenMenuId(null);openActModal(menuDeal);}}
+              style={{width:"100%",textAlign:"left",padding:"8px 12px",border:"none",background:"none",cursor:"pointer",fontSize:"12px",color:"#374151",display:"flex",alignItems:"center",gap:"8px"}}
+              onMouseOver={e=>e.currentTarget.style.background="#f8fafc"} onMouseOut={e=>e.currentTarget.style.background="none"}>
+              <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+              Activity
+            </button>
+            {menuDeal.phone && (
+              <a href={`tel:${menuDeal.phone.replace(/\D/g,"")}`} onClick={()=>setOpenMenuId(null)}
+                style={{width:"100%",textAlign:"left",padding:"8px 12px",border:"none",background:"none",cursor:"pointer",fontSize:"12px",color:"#374151",display:"flex",alignItems:"center",gap:"8px",textDecoration:"none"}}
+                onMouseOver={e=>e.currentTarget.style.background="#f8fafc"} onMouseOut={e=>e.currentTarget.style.background="none"}>
+                <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
+                Call
+              </a>
+            )}
+            {menuDeal.phone && (
+              <a href={`https://wa.me/91${menuDeal.phone.replace(/\D/g,"")}`} target="_blank" rel="noreferrer" onClick={()=>setOpenMenuId(null)}
+                style={{width:"100%",textAlign:"left",padding:"8px 12px",border:"none",background:"none",cursor:"pointer",fontSize:"12px",color:"#16a34a",display:"flex",alignItems:"center",gap:"8px",textDecoration:"none"}}
+                onMouseOver={e=>e.currentTarget.style.background="#f0fdf4"} onMouseOut={e=>e.currentTarget.style.background="none"}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                WhatsApp
+              </a>
+            )}
+            <div style={{borderTop:"1px solid #f1f5f9"}}/>
+            <button onClick={()=>{setOpenMenuId(null);remove(menuDeal.id);}}
+              style={{width:"100%",textAlign:"left",padding:"8px 12px",border:"none",background:"none",cursor:"pointer",fontSize:"12px",color:"#ef4444",display:"flex",alignItems:"center",gap:"8px"}}
+              onMouseOver={e=>e.currentTarget.style.background="#fef2f2"} onMouseOut={e=>e.currentTarget.style.background="none"}>
+              <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M4 7h16"/></svg>
+              Delete
+            </button>
+          </div>
+        );
+      })()}
 
       {/* Add/Edit Deal Modal */}
       {showDealModal && (
