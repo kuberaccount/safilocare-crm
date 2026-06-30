@@ -157,7 +157,16 @@ export default function ReportsPage({ currentUser }) {
     return "";
   }
 
-  const TABS = ["overview","funnel","salesperson","won","overdue"];
+  const isAdmin = currentUser?.role === "admin";
+  const TABS = isAdmin
+    ? ["overview","funnel","salesperson","won","overdue"]
+    : ["overview","funnel","won","overdue"];
+
+  // Defensive: a non-admin should never land on the salesperson tab even via
+  // stale state (e.g. tab was set before role was known) — bounce back to overview.
+  useEffect(() => {
+    if (!isAdmin && tab === "salesperson") setTab("overview");
+  }, [isAdmin, tab]);
 
   return (
     <div className="p-6 max-w-6xl">
@@ -343,7 +352,7 @@ export default function ReportsPage({ currentUser }) {
       )}
 
       {/* BY SALESPERSON */}
-      {tab==="salesperson" && (
+      {tab==="salesperson" && isAdmin && (
         <div className="space-y-4">
           {spReport.length===0
             ? <div className="card p-8 text-center text-gray-400 text-sm">No salespersons found.</div>
