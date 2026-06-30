@@ -6,7 +6,7 @@ import toast from "react-hot-toast";
 
 const STAGES = ["Lead","Qualified","Proposal","Negotiation","Won","Lost"];
 const LEAD_STATUSES = ["Cold","Warm","Hot"];
-const PARTY_TYPES = ["Super Stockist","Distributor / Dealer","Retailer","Surgical / Pharma Dealer"];
+const PARTY_TYPES = ["Export","Super Stockist","Distributor / Dealer","Retailer","Surgical / Pharma Dealer"];
 const LEAD_TYPES = ["B2B","B2C","B2G"];
 const ACT_TYPES = ["Email","Call","Meeting","Note"];
 
