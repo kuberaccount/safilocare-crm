@@ -31,6 +31,14 @@ export default function ReportsPage({ currentUser }) {
       .finally(() => setLoading(false));
   }, []);
 
+  // Defensive: a non-admin should never land on the salesperson tab even via
+  // stale state (e.g. tab was set before role was known) — bounce back to overview.
+  // Placed here, before any early return below, so hook order stays stable
+  // across renders (React's Rules of Hooks).
+  useEffect(() => {
+    if (currentUser?.role !== "admin" && tab === "salesperson") setTab("overview");
+  }, [currentUser, tab]);
+
   function exportExcel() {
     const isAdmin = currentUser?.role === "admin";
     const spName = currentUser?.salesperson || "All";
@@ -161,12 +169,6 @@ export default function ReportsPage({ currentUser }) {
   const TABS = isAdmin
     ? ["overview","funnel","salesperson","won","overdue"]
     : ["overview","funnel","won","overdue"];
-
-  // Defensive: a non-admin should never land on the salesperson tab even via
-  // stale state (e.g. tab was set before role was known) — bounce back to overview.
-  useEffect(() => {
-    if (!isAdmin && tab === "salesperson") setTab("overview");
-  }, [isAdmin, tab]);
 
   return (
     <div className="p-6 max-w-6xl">
