@@ -25,7 +25,7 @@ const STATUS_STYLE = {
   Cold: { bg:"#dbeafe", color:"#1e40af", dot:"#3b82f6" },
 };
 
-const ACT_TYPE_ICON = { Email:"✉️", Call:"📞", Meeting:"🗓️", Note:"📝" };
+const ACT_TYPE_ICON = { WhatsApp:"✉️", Call:"📞", Meeting:"🗓️", Note:"📝" };
 
 const EMPTY_DEAL = {
   title:"", contactId:"", contact:"", phone:"", company:"", value:"",
