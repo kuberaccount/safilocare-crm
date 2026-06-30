@@ -8,7 +8,7 @@ const STAGES = ["Lead","Qualified","Proposal","Negotiation","Won","Lost"];
 const LEAD_STATUSES = ["Cold","Warm","Hot"];
 const PARTY_TYPES = ["Super Stockist","Distributor / Dealer","Retailer","Surgical / Pharma Dealer","Export"];
 const LEAD_TYPES = ["B2B","B2C","B2G"];
-const ACT_TYPES = ["WhatsApp","Call","Meeting","Note"];
+const ACT_TYPES = ["WhatsApp","Call","Meeting","Sample"];
 
 const STAGE_CONFIG = {
   Lead:        { border:"#94a3b8", bg:"#f8fafc", badge:"#64748b" },
@@ -25,7 +25,7 @@ const STATUS_STYLE = {
   Cold: { bg:"#dbeafe", color:"#1e40af", dot:"#3b82f6" },
 };
 
-const ACT_TYPE_ICON = { WhatsApp:"✉️", Call:"📞", Meeting:"🗓️", Note:"📝" };
+const ACT_TYPE_ICON = { WhatsApp:"✉️", Call:"📞", Meeting:"🗓️", Sample:"" };
 
 const EMPTY_DEAL = {
   title:"", contactId:"", contact:"", phone:"", company:"", value:"",
