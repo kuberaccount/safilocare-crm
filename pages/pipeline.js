@@ -25,6 +25,8 @@ const STATUS_STYLE = {
   Cold: { bg:"#dbeafe", color:"#1e40af", dot:"#3b82f6" },
 };
 
+const ACT_TYPE_ICON = { Email:"✉️", Call:"📞", Meeting:"🗓️", Note:"📝" };
+
 const EMPTY_DEAL = {
   title:"", contactId:"", contact:"", phone:"", company:"", value:"",
   stage:"Lead", leadStatus:"Cold", partyType:"", leadType:"B2B",
@@ -42,11 +44,19 @@ function Avatar({ name, size=28 }) {
   );
 }
 
+async function safeLog(fn) {
+  try { await fn(); } catch (e) { console.error("logAction error (non-blocking):", e); }
+}
+
 export default function PipelinePage({ currentUser }) {
+  const isAdmin = currentUser?.role === "admin";
+  const mySalesperson = currentUser?.salesperson || "Unassigned";
+
   const [deals, setDeals] = useState([]);
   const [contacts, setContacts] = useState([]);
   const [salespersons, setSalespersons] = useState([]);
-  const [filterSP, setFilterSP] = useState("All");
+  // Non-admins are LOCKED to their own salesperson name — no dropdown choice.
+  const [filterSP, setFilterSP] = useState(isAdmin ? "All" : mySalesperson);
   const [filterStatus, setFilterStatus] = useState("All");
   const [showDealModal, setShowDealModal] = useState(false);
   const [editDeal, setEditDeal] = useState(null);
@@ -67,8 +77,12 @@ export default function PipelinePage({ currentUser }) {
   async function load() {
     setLoading(true);
     try {
-      const sp = currentUser?.role !== "admin" ? currentUser?.salesperson : null;
-      const [d, c, s] = await Promise.all([getDeals(sp), getContacts(sp), getSalespersons()]);
+      // CRITICAL: non-admins ALWAYS pass their own salesperson name to getDeals.
+      // This is a hard server-side-style filter — never null for a non-admin,
+      // even if currentUser.salesperson is somehow blank (falls back to a
+      // name that won't match anything, rather than silently loading all deals).
+      const sp = isAdmin ? null : (currentUser?.salesperson || "__none__");
+      const [d, c, s] = await Promise.all([getDeals(sp), getContacts(null), getSalespersons()]);
       setDeals(d); setContacts(c); setSalespersons(s);
     } catch { toast.error("Could not load"); }
     finally { setLoading(false); }
@@ -90,7 +104,10 @@ export default function PipelinePage({ currentUser }) {
     setShowContactDrop(false);
   }
 
-  function openAdd() { setDealForm(EMPTY_DEAL); setEditDeal(null); setContactSearch(""); setShowDealModal(true); }
+  function openAdd() {
+    setDealForm({ ...EMPTY_DEAL, salesperson: isAdmin ? "Unassigned" : mySalesperson });
+    setEditDeal(null); setContactSearch(""); setShowDealModal(true);
+  }
   function openEdit(deal) {
     setDealForm({...EMPTY_DEAL,...deal}); setEditDeal(deal);
     setContactSearch(deal.contact?`${deal.contact}${deal.phone?" — "+deal.phone:""}` : "");
@@ -100,17 +117,25 @@ export default function PipelinePage({ currentUser }) {
   async function saveDeal() {
     if (!dealForm.title.trim()) return toast.error("Deal title required");
     if (!dealForm.contactId && !dealForm.contact) return toast.error("Please select a contact");
+    // Non-admins can't reassign a deal away from themselves
+    const finalForm = isAdmin ? dealForm : { ...dealForm, salesperson: mySalesperson };
     setSaving(true);
     try {
-      if (editDeal) { await updateDeal(editDeal.id, dealForm);
-      const action = dealForm.stage === "Won" ? "Won Deal" : dealForm.followUpDate !== editDeal.followUpDate ? "Marked Follow-up" : "Updated Lead";
-      await logAction(currentUser, action, { dealTitle: dealForm.title, stage: dealForm.stage, followUpDate: dealForm.followUpDate });
-      toast.success("Deal updated ✅"); }
-      else { await addDeal(dealForm);
-      await logAction(currentUser, "Added Lead", { dealTitle: dealForm.title, contact: dealForm.contact, company: dealForm.company });
-      toast.success("Deal added ✅"); }
+      if (editDeal) {
+        await updateDeal(editDeal.id, finalForm);
+        toast.success("Deal updated ✅");
+        const action = finalForm.stage === "Won" ? "Won Deal" : finalForm.followUpDate !== editDeal.followUpDate ? "Marked Follow-up" : "Updated Lead";
+        await safeLog(() => logAction(currentUser, action, { dealTitle: finalForm.title, stage: finalForm.stage, followUpDate: finalForm.followUpDate }));
+      } else {
+        await addDeal(finalForm);
+        toast.success("Deal added ✅");
+        await safeLog(() => logAction(currentUser, "Added Lead", { dealTitle: finalForm.title, contact: finalForm.contact, company: finalForm.company }));
+      }
       setShowDealModal(false); load();
-    } catch { toast.error("Failed to save"); }
+    } catch (e) {
+      console.error("Deal save error:", e);
+      toast.error("Failed to save: " + (e?.message || "unknown error"));
+    }
     finally { setSaving(false); }
   }
 
@@ -125,14 +150,21 @@ export default function PipelinePage({ currentUser }) {
     try {
       await addActivity({ ...actForm, dealId:actModal.id, dealTitle:actModal.title, contact:actModal.contact, company:actModal.company, salesperson:actModal.salesperson });
       toast.success("Activity logged ✅");
-      await logAction(currentUser, "Logged Activity", { dealTitle: actModal.title, activityType: actForm.type, subject: actForm.subject });
-      setActForm({ type:"Email", subject:"", notes:"", followUpDate:"" });
-      // Update follow-up date on the deal if changed
+
+      await safeLog(() => logAction(currentUser, "Logged Activity", { dealTitle: actModal.title, activityType: actForm.type, subject: actForm.subject }));
+
       if (actForm.followUpDate && actForm.followUpDate !== actModal.followUpDate) {
-        await updateDeal(actModal.id, { followUpDate: actForm.followUpDate });
+        try { await updateDeal(actModal.id, { followUpDate: actForm.followUpDate }); }
+        catch (e) { console.error("Follow-up date update failed (non-blocking):", e); }
       }
-      setDealActivities(await getActivitiesForDeal(actModal.id));
-    } catch { toast.error("Failed"); }
+
+      setActForm({ type:"Email", subject:"", notes:"", followUpDate:"" });
+      try { setDealActivities(await getActivitiesForDeal(actModal.id)); }
+      catch (e) { console.error("Refresh activity list failed (non-blocking):", e); }
+    } catch (e) {
+      console.error("Activity save error:", e);
+      toast.error("Failed to log activity: " + (e?.message || "unknown error"));
+    }
     finally { setSaving(false); }
   }
 
@@ -140,7 +172,7 @@ export default function PipelinePage({ currentUser }) {
     if (!confirm("Delete this deal?")) return;
     const delDeal = deals.find(d=>d.id===id);
     await deleteDeal(id);
-    await logAction(currentUser, "Deleted Lead", { dealTitle: delDeal?.title || id });
+    await safeLog(() => logAction(currentUser, "Deleted Lead", { dealTitle: delDeal?.title || id }));
     toast.success("Deleted");
     setDeals(d => d.filter(x => x.id !== id));
   }
@@ -149,7 +181,7 @@ export default function PipelinePage({ currentUser }) {
   async function onDrop(stage) {
     if (!dragDeal.current || dragDeal.current.stage === stage) { dragDeal.current=null; return; }
     await updateDeal(dragDeal.current.id, { stage });
-    await logAction(currentUser, stage === 'Won' ? 'Won Deal' : 'Moved Stage', { dealTitle: dragDeal.current.title, stage });
+    await safeLog(() => logAction(currentUser, stage === 'Won' ? 'Won Deal' : 'Moved Stage', { dealTitle: dragDeal.current.title, stage }));
     toast.success(`Moved to ${stage} 📌`);
     dragDeal.current = null; load();
   }
@@ -164,9 +196,14 @@ export default function PipelinePage({ currentUser }) {
     return `${Math.floor(s/86400)}d ago`;
   }
 
+  function fullDateTime(ts) {
+    if (!ts) return "—";
+    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    return d.toLocaleString("en-IN", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" });
+  }
+
   function parseDate(str) {
     if (!str) return null;
-    // Handle DD-MM-YYYY format stored from old data
     if (str.includes("-") && str.split("-")[0].length === 2) {
       const [d,m,y] = str.split("-");
       return new Date(`${y}-${m}-${d}`);
@@ -188,16 +225,8 @@ export default function PipelinePage({ currentUser }) {
     return d < new Date(new Date().toDateString());
   }
 
-  function isToday(str) {
-    if (!str) return false;
-    const d = parseDate(str);
-    if (!d || isNaN(d)) return false;
-    const t = new Date();
-    return d.getDate()===t.getDate() && d.getMonth()===t.getMonth() && d.getFullYear()===t.getFullYear();
-  }
-
   const filtered = deals.filter(d => {
-    const matchSP = filterSP === "All" || d.salesperson === filterSP;
+    const matchSP = isAdmin ? (filterSP === "All" || d.salesperson === filterSP) : true; // already pre-filtered by load()
     const matchStatus = filterStatus === "All" || d.leadStatus === filterStatus;
     return matchSP && matchStatus;
   });
@@ -208,7 +237,6 @@ export default function PipelinePage({ currentUser }) {
     if (!d.followUpDate) return false;
     const fd = d.followUpDate;
     if (fd === todayStr) return true;
-    // also check DD-MM-YYYY
     if (fd.includes("-") && fd.split("-")[0].length === 2) {
       const [day,mon,yr] = fd.split("-");
       return `${yr}-${mon}-${day}` === todayStr;
@@ -227,6 +255,7 @@ export default function PipelinePage({ currentUser }) {
             <h1 style={{fontSize:"18px",fontWeight:700,color:"#0f172a",margin:0}}>Pipeline</h1>
             <p style={{fontSize:"13px",color:"#64748b",margin:"2px 0 0"}}>
               <span style={{fontWeight:600,color:"#6366f1"}}>₹{totalValue.toLocaleString("en-IN")}</span> total · {filtered.length} deals
+              {!isAdmin && <span style={{marginLeft:"8px",color:"#94a3b8"}}>· {mySalesperson}'s pipeline</span>}
               {todayFollowUps.length > 0 && (
                 <span style={{marginLeft:"10px",background:"#fef3c7",color:"#92400e",fontSize:"11px",padding:"2px 8px",borderRadius:"20px",fontWeight:600}}>
                   📅 {todayFollowUps.length} follow-up{todayFollowUps.length>1?"s":""} today
@@ -235,11 +264,15 @@ export default function PipelinePage({ currentUser }) {
             </p>
           </div>
           <div style={{display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center"}}>
-            <select className="input" style={{width:"160px"}} value={filterSP} onChange={e=>setFilterSP(e.target.value)}>
-              <option value="All">All salespersons</option>
-              <option value="Unassigned">Unassigned</option>
-              {salespersons.map(s=><option key={s.id}>{s.name}</option>)}
-            </select>
+            {/* Salesperson filter — ADMIN ONLY. Non-admins never see this dropdown,
+                so there's no way for them to browse other people's pipelines. */}
+            {isAdmin && (
+              <select className="input" style={{width:"160px"}} value={filterSP} onChange={e=>setFilterSP(e.target.value)}>
+                <option value="All">All salespersons</option>
+                <option value="Unassigned">Unassigned</option>
+                {salespersons.map(s=><option key={s.id}>{s.name}</option>)}
+              </select>
+            )}
             <select className="input" style={{width:"120px"}} value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}>
               <option value="All">All status</option>
               {LEAD_STATUSES.map(s=><option key={s}>{s}</option>)}
@@ -280,7 +313,6 @@ export default function PipelinePage({ currentUser }) {
               <div key={stage} style={{flexShrink:0,width:"230px",minHeight:"200px"}}
                 onDragOver={e=>e.preventDefault()} onDrop={()=>onDrop(stage)}>
 
-                {/* Column header */}
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"10px",padding:"0 2px"}}>
                   <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
                     <div style={{width:"10px",height:"10px",borderRadius:"50%",background:cfg.border,flexShrink:0}}/>
@@ -289,7 +321,6 @@ export default function PipelinePage({ currentUser }) {
                   <span style={{fontSize:"11px",fontWeight:700,color:"white",background:cfg.badge,borderRadius:"20px",padding:"1px 8px"}}>{stageDeals.length}</span>
                 </div>
 
-                {/* Cards */}
                 <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
                   {stageDeals.map(deal => {
                     const ss = STATUS_STYLE[deal.leadStatus] || STATUS_STYLE.Cold;
@@ -298,7 +329,6 @@ export default function PipelinePage({ currentUser }) {
                       <div key={deal.id} className="deal-card" draggable onDragStart={()=>onDragStart(deal)}
                         style={{borderLeft:`3px solid ${cfg.border}`}}>
 
-                        {/* Status badge + title */}
                         <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"6px",marginBottom:"6px"}}>
                           <p style={{fontSize:"13px",fontWeight:600,color:"#0f172a",margin:0,lineHeight:1.3}}>{deal.title}</p>
                           {deal.leadStatus && (
@@ -309,7 +339,6 @@ export default function PipelinePage({ currentUser }) {
                           )}
                         </div>
 
-                        {/* Contact info */}
                         <div style={{display:"flex",alignItems:"center",gap:"6px",marginBottom:"4px"}}>
                           {deal.contact && <Avatar name={deal.contact} size={20}/>}
                           <div style={{minWidth:0}}>
@@ -318,13 +347,11 @@ export default function PipelinePage({ currentUser }) {
                           </div>
                         </div>
 
-                        {/* Tags row */}
                         <div style={{display:"flex",flexWrap:"wrap",gap:"4px",marginBottom:"6px"}}>
                           {deal.partyType && <span style={{fontSize:"10px",background:"#ede9fe",color:"#6d28d9",padding:"1px 6px",borderRadius:"4px",fontWeight:500}}>{deal.partyType}</span>}
                           {deal.salesperson && deal.salesperson!=="Unassigned" && <span style={{fontSize:"10px",background:"#e0f2fe",color:"#0369a1",padding:"1px 6px",borderRadius:"4px",fontWeight:500}}>👤 {deal.salesperson}</span>}
                         </div>
 
-                        {/* Follow-up date */}
                         {deal.followUpDate && (
                           <div style={{fontSize:"10px",padding:"3px 7px",borderRadius:"6px",marginBottom:"6px",fontWeight:600,display:"inline-flex",alignItems:"center",gap:"4px",
                             background:overdue?"#fee2e2":"#f0fdf4",color:overdue?"#b91c1c":"#15803d"}}>
@@ -332,12 +359,10 @@ export default function PipelinePage({ currentUser }) {
                           </div>
                         )}
 
-                        {/* Value */}
                         {deal.value && (
                           <p style={{fontSize:"14px",fontWeight:700,color:"#6366f1",margin:"0 0 6px"}}>₹{parseFloat(deal.value).toLocaleString("en-IN")}</p>
                         )}
 
-                        {/* Action row */}
                         <div style={{display:"flex",gap:"4px",borderTop:"1px solid #f1f5f9",paddingTop:"6px",alignItems:"center"}}>
                           <button onClick={()=>openEdit(deal)} style={{flex:1,fontSize:"11px",padding:"4px",borderRadius:"6px",border:"none",background:"#f8fafc",color:"#64748b",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:"3px",fontWeight:500}}
                             onMouseOver={e=>e.currentTarget.style.background="#e0e7ff"} onMouseOut={e=>e.currentTarget.style.background="#f8fafc"}>
@@ -349,7 +374,6 @@ export default function PipelinePage({ currentUser }) {
                             <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
                             Activity
                           </button>
-                          {/* Call button */}
                           {deal.phone && (
                             <a href={`tel:${deal.phone.replace(/\D/g,"")}`}
                               title={`Call ${deal.contact} — ${deal.phone}`}
@@ -361,7 +385,6 @@ export default function PipelinePage({ currentUser }) {
                               </svg>
                             </a>
                           )}
-                          {/* WhatsApp button */}
                           {deal.phone && (
                             <a href={`https://wa.me/91${deal.phone.replace(/\D/g,"")}`} target="_blank" rel="noreferrer"
                               className="btn-whatsapp" title={`WhatsApp ${deal.contact}`}>
@@ -395,7 +418,6 @@ export default function PipelinePage({ currentUser }) {
         <Modal title={editDeal?"Edit deal":"Add deal"} onClose={()=>setShowDealModal(false)}>
           <div style={{maxHeight:"70vh",overflowY:"auto",paddingRight:"4px"}}>
             <div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
-              {/* Contact search */}
               <div style={{position:"relative"}}>
                 <label style={{display:"block",fontSize:"11px",fontWeight:600,color:"#374151",marginBottom:"4px"}}>
                   Search contact * <span style={{color:"#94a3b8",fontWeight:400}}>(name or phone)</span>
@@ -422,6 +444,11 @@ export default function PipelinePage({ currentUser }) {
                 )}
                 {dealForm.contact && (
                   <p style={{fontSize:"11px",color:"#059669",marginTop:"4px",fontWeight:500}}>✅ {dealForm.contact} — {dealForm.company||"No company"}</p>
+                )}
+                {contactSearch && !dealForm.contactId && contactResults.length===0 && (
+                  <p style={{fontSize:"11px",color:"#dc2626",marginTop:"4px",fontWeight:500}}>
+                    ⚠️ No contact found. Add it in the Contacts page first.
+                  </p>
                 )}
               </div>
 
@@ -481,11 +508,19 @@ export default function PipelinePage({ currentUser }) {
               </div>
 
               <div>
-                <label style={{display:"block",fontSize:"11px",fontWeight:600,color:"#374151",marginBottom:"4px"}}>Assigned salesperson</label>
-                <select className="input" value={dealForm.salesperson} onChange={setF("salesperson")}>
-                  <option>Unassigned</option>
-                  {salespersons.map(s=><option key={s.id}>{s.name}</option>)}
-                </select>
+                <label style={{display:"block",fontSize:"11px",fontWeight:600,color:"#374151",marginBottom:"4px"}}>
+                  Assigned salesperson {!isAdmin && <span style={{color:"#94a3b8",fontWeight:400}}>(locked to you)</span>}
+                </label>
+                {isAdmin ? (
+                  <select className="input" value={dealForm.salesperson} onChange={setF("salesperson")}>
+                    <option>Unassigned</option>
+                    {salespersons.map(s=><option key={s.id}>{s.name}</option>)}
+                  </select>
+                ) : (
+                  <div className="input" style={{background:"#f8fafc",color:"#374151",fontWeight:600,cursor:"not-allowed"}}>
+                    {mySalesperson}
+                  </div>
+                )}
               </div>
 
               <div>
@@ -538,20 +573,43 @@ export default function PipelinePage({ currentUser }) {
             <button className="btn btn-primary" style={{width:"100%",justifyContent:"center",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",border:"none"}} onClick={saveActivity} disabled={saving}>
               {saving?"Saving...":"Log activity"}
             </button>
-            {dealActivities.length>0 && (
-              <div style={{borderTop:"1px solid #f1f5f9",paddingTop:"12px"}}>
-                <p style={{fontSize:"11px",fontWeight:600,color:"#64748b",marginBottom:"8px",textTransform:"uppercase",letterSpacing:"0.05em"}}>Past activities</p>
-                <div style={{display:"flex",flexDirection:"column",gap:"6px",maxHeight:"140px",overflowY:"auto"}}>
-                  {dealActivities.map(a=>(
-                    <div key={a.id} style={{fontSize:"12px",background:"#f8fafc",borderRadius:"8px",padding:"8px 10px",display:"flex",gap:"8px",alignItems:"flex-start"}}>
-                      <span style={{fontWeight:700,color:"#6366f1",flexShrink:0}}>{a.type}</span>
-                      <span style={{color:"#374151",flex:1}}>{a.subject}</span>
-                      <span style={{color:"#94a3b8",flexShrink:0}}>{timeAgo(a.createdAt)}</span>
+
+            <div style={{borderTop:"1px solid #f1f5f9",paddingTop:"12px"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"8px"}}>
+                <p style={{fontSize:"11px",fontWeight:700,color:"#64748b",margin:0,textTransform:"uppercase",letterSpacing:"0.05em"}}>
+                  History for {actModal.title}
+                </p>
+                <span style={{fontSize:"11px",fontWeight:700,color:"white",background:"#6366f1",borderRadius:"20px",padding:"1px 8px"}}>
+                  {dealActivities.length}
+                </span>
+              </div>
+              {dealActivities.length===0 ? (
+                <p style={{fontSize:"12px",color:"#94a3b8",textAlign:"center",padding:"12px 0"}}>No activity logged yet for this lead.</p>
+              ) : (
+                <div style={{display:"flex",flexDirection:"column",maxHeight:"220px",overflowY:"auto"}}>
+                  {dealActivities.map((a,i)=>(
+                    <div key={a.id} style={{display:"flex",gap:"10px",position:"relative",paddingBottom: i===dealActivities.length-1 ? 0 : "12px"}}>
+                      <div style={{display:"flex",flexDirection:"column",alignItems:"center",flexShrink:0}}>
+                        <div style={{width:"22px",height:"22px",borderRadius:"50%",background:"#eef2ff",color:"#6366f1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"11px",flexShrink:0}}>
+                          {ACT_TYPE_ICON[a.type] || "•"}
+                        </div>
+                        {i !== dealActivities.length-1 && (
+                          <div style={{flex:1,width:"2px",background:"#e2e8f0",marginTop:"2px"}}/>
+                        )}
+                      </div>
+                      <div style={{flex:1,paddingBottom:"2px"}}>
+                        <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:"8px"}}>
+                          <p style={{fontSize:"12px",fontWeight:700,color:"#0f172a",margin:0}}>{a.type}: {a.subject}</p>
+                          <span style={{fontSize:"10px",color:"#94a3b8",flexShrink:0}}>{timeAgo(a.createdAt)}</span>
+                        </div>
+                        {a.notes && <p style={{fontSize:"11px",color:"#64748b",margin:"2px 0 0"}}>{a.notes}</p>}
+                        <p style={{fontSize:"10px",color:"#cbd5e1",margin:"2px 0 0"}}>{fullDateTime(a.createdAt)}{a.salesperson && ` · ${a.salesperson}`}</p>
+                      </div>
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </Modal>
       )}
