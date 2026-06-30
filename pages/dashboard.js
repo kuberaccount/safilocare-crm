@@ -6,6 +6,7 @@ import ActivitiesPage from "./activities";
 import ReportsPage from "./reports";
 import AdminPage from "./admin";
 import TeamReportPage from "./teamreport";
+import CoveragePage from "./coverage";
 
 export default function Dashboard({ user, userData }) {
   const [page, setPage] = useState("dashboard");
@@ -19,6 +20,7 @@ export default function Dashboard({ user, userData }) {
     pipeline:   <PipelinePage currentUser={userData} />,
     activities: <ActivitiesPage currentUser={userData} />,
     reports:    <ReportsPage currentUser={userData} />,
+    coverage:   <CoveragePage currentUser={userData} />,
     ...(isAdmin ? { admin: <AdminPage />, teamreport: <TeamReportPage /> } : {}),
   };
 
@@ -36,6 +38,7 @@ const QUICK = [
   { label:"Pipeline",   page:"pipeline",   emoji:"📊", desc:"Track deals & stages",        grad:"linear-gradient(135deg,#f59e0b,#ef4444)" },
   { label:"Activities", page:"activities", emoji:"📝", desc:"Emails, calls, meetings",     grad:"linear-gradient(135deg,#10b981,#059669)" },
   { label:"Reports",    page:"reports",    emoji:"📈", desc:"Analytics & insights",        grad:"linear-gradient(135deg,#3b82f6,#6366f1)" },
+  { label:"Coverage",   page:"coverage",   emoji:"📍", desc:"Find references by area",     grad:"linear-gradient(135deg,#14b8a6,#0d9488)" },
 ];
 
 function DashboardHome({ onNav, user, userData, isAdmin }) {
