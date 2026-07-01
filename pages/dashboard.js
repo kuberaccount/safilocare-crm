@@ -72,7 +72,7 @@ function DashboardHome({ onNav, user, userData, isAdmin }) {
     textTransform:"uppercase",
     whiteSpace:"nowrap",
   }}>
-    NO TIMELINE · NO WORK · NO RESULT
+    NO TIMELINE · NO EXECUTION · NO RESULT
   </p>
 </div>
       </div>
