@@ -64,7 +64,7 @@ function DashboardHome({ onNav, user, userData, isAdmin }) {
         <div style={{position:"relative",zIndex:1,textAlign:"center",flex:1,display:"flex",justifyContent:"center"}}>
   <p style={{
     margin:0,
-    fontSize:"25px",
+    fontSize:"20px",
     fontWeight:700,
     color:"#a5b4fc",
     letterSpacing:"0.08em",
