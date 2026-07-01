@@ -63,7 +63,7 @@ function DashboardHome({ onNav, user, userData, isAdmin }) {
         {/* Right — motivational line. To change it, just edit the text below. */}
         <div style={{position:"relative",zIndex:1,textAlign:"right",flexShrink:0,maxWidth:"320px"}}>
           <p style={{
-            margin:0,
+            margin:10,
             fontSize:"15px",
             fontWeight:700,
             color:"#a5b4fc",
