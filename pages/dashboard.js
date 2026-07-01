@@ -42,7 +42,7 @@ function DashboardHome({ onNav, user, userData, isAdmin }) {
   if (!user) return null;
 
   const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const greeting = hour < 12 ? "Good Morning" : hour < 17 ? "Good Afternoon" : "Good Evening";
   const firstName = user.displayName?.split(" ")[0] || "Welcome";
 
   return (
