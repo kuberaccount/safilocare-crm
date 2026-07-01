@@ -61,19 +61,20 @@ function DashboardHome({ onNav, user, userData, isAdmin }) {
           </p>
         </div>
         {/* Right — motivational line. To change it, just edit the text below. */}
-        <div style={{position:"relative",zIndex:1,textAlign:"center",flexShrink:0,maxWidth:"320px"}}>
-          <p style={{
-            margin:10,
-            fontSize:"15px",
-            fontWeight:700,
-            color:"#a5b4fc",
-            letterSpacing:"0.08em",
-            lineHeight:1.6,
-            textTransform:"uppercase",
-          }}>
-            NO TIMELINE · NO WORK · NO RESULT
-          </p>
-        </div>
+        <div style={{position:"relative",zIndex:1,textAlign:"center",flex:1,display:"flex",justifyContent:"center"}}>
+  <p style={{
+    margin:0,
+    fontSize:"15px",
+    fontWeight:700,
+    color:"#a5b4fc",
+    letterSpacing:"0.08em",
+    lineHeight:1.6,
+    textTransform:"uppercase",
+    whiteSpace:"nowrap",
+  }}>
+    NO TIMELINE · NO WORK · NO RESULT
+  </p>
+</div>
       </div>
 
       <div style={{ padding:"24px" }}>
