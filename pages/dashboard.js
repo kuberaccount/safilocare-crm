@@ -6,7 +6,6 @@ import ActivitiesPage from "./activities";
 import ReportsPage from "./reports";
 import AdminPage from "./admin";
 import TeamReportPage from "./teamreport";
-import CoveragePage from "./coverage";
 
 export default function Dashboard({ user, userData }) {
   const [page, setPage] = useState("dashboard");
@@ -20,7 +19,6 @@ export default function Dashboard({ user, userData }) {
     pipeline:   <PipelinePage currentUser={userData} />,
     activities: <ActivitiesPage currentUser={userData} />,
     reports:    <ReportsPage currentUser={userData} />,
-    coverage:   <CoveragePage currentUser={userData} />,
     ...(isAdmin ? { admin: <AdminPage />, teamreport: <TeamReportPage /> } : {}),
   };
 
@@ -38,7 +36,6 @@ const QUICK = [
   { label:"Pipeline",   page:"pipeline",   emoji:"📊", desc:"Track deals & stages",        grad:"linear-gradient(135deg,#f59e0b,#ef4444)" },
   { label:"Activities", page:"activities", emoji:"📝", desc:"Emails, calls, meetings",     grad:"linear-gradient(135deg,#10b981,#059669)" },
   { label:"Reports",    page:"reports",    emoji:"📈", desc:"Analytics & insights",        grad:"linear-gradient(135deg,#3b82f6,#6366f1)" },
-  { label:"Coverage",   page:"coverage",   emoji:"📍", desc:"Find references by area",     grad:"linear-gradient(135deg,#14b8a6,#0d9488)" },
 ];
 
 function DashboardHome({ onNav, user, userData, isAdmin }) {
@@ -52,14 +49,31 @@ function DashboardHome({ onNav, user, userData, isAdmin }) {
     <div style={{ minHeight:"100%", background:"#f8fafc" }}>
 
       {/* Hero banner */}
-      <div style={{ background:"linear-gradient(135deg,#0f172a 0%,#1e1b4b 60%,#312e81 100%)", padding:"32px 28px 28px", position:"relative", overflow:"hidden" }}>
+      <div style={{ background:"linear-gradient(135deg,#0f172a 0%,#1e1b4b 60%,#312e81 100%)", padding:"32px 28px 28px", position:"relative", overflow:"hidden", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
         <div style={{ position:"absolute", top:"-40px", right:"-40px", width:"200px", height:"200px", borderRadius:"50%", background:"rgba(99,102,241,0.15)" }}/>
         <div style={{ position:"absolute", bottom:"-20px", left:"30%", width:"120px", height:"120px", borderRadius:"50%", background:"rgba(139,92,246,0.1)" }}/>
-        <p style={{ fontSize:"13px", color:"#a5b4fc", margin:"0 0 4px", fontWeight:500 }}>{greeting} 👋</p>
-        <h1 style={{ fontSize:"24px", fontWeight:800, color:"white", margin:"0 0 4px" }}>{firstName}</h1>
-        <p style={{ fontSize:"13px", color:"#94a3b8", margin:0 }}>
-          {isAdmin ? "Admin — full access to all data" : `Salesperson · ${userData?.salesperson || "Unassigned"}`}
-        </p>
+        {/* Left — greeting */}
+        <div style={{position:"relative",zIndex:1}}>
+          <p style={{ fontSize:"13px", color:"#a5b4fc", margin:"0 0 4px", fontWeight:500 }}>{greeting} 👋</p>
+          <h1 style={{ fontSize:"24px", fontWeight:800, color:"white", margin:"0 0 4px" }}>{firstName}</h1>
+          <p style={{ fontSize:"13px", color:"#94a3b8", margin:0 }}>
+            {isAdmin ? "Admin — full access to all data" : `Salesperson · ${userData?.salesperson || "Unassigned"}`}
+          </p>
+        </div>
+        {/* Right — motivational line. To change it, just edit the text below. */}
+        <div style={{position:"relative",zIndex:1,textAlign:"right",flexShrink:0,maxWidth:"320px"}}>
+          <p style={{
+            margin:0,
+            fontSize:"15px",
+            fontWeight:700,
+            color:"#a5b4fc",
+            letterSpacing:"0.08em",
+            lineHeight:1.6,
+            textTransform:"uppercase",
+          }}>
+            NO TIMELINE · NO WORK · NO RESULT
+          </p>
+        </div>
       </div>
 
       <div style={{ padding:"24px" }}>
