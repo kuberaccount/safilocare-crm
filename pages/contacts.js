@@ -120,6 +120,16 @@ export default function ContactsPage({ currentUser }) {
   const [pincodeLoading, setPincodeLoading] = useState(false);
   const [newSPName, setNewSPName] = useState("");
   const [addingSP, setAddingSP] = useState(false);
+  // ── Bulk import state ──────────────────────────────────────
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importRows, setImportRows] = useState([]);      // parsed preview rows
+  const [importSP, setImportSP] = useState("Unassigned"); // admin-only override
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState(null); // { added, skipped }
+  const importFileRef = useRef(null);
+
+  const isAdmin = currentUser?.role === "admin";
+  const mySalesperson = currentUser?.salesperson || "Unassigned";
 
   useEffect(() => { load(); }, []);
 
@@ -223,6 +233,79 @@ export default function ContactsPage({ currentUser }) {
     } catch(e) { toast.error("Failed: "+e.message); }
   }
 
+  // ── Bulk import ───────────────────────────────────────────
+  function handleFileSelect(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const rows = parseCSV(ev.target.result);
+        if (rows.length < 2) return toast.error("CSV must have a header row and at least one data row");
+        const headers = rows[0].map(h => h.trim().toLowerCase());
+        // Map CSV headers to our field names
+        const fieldMap = {};
+        Object.entries(HEADER_MAP).forEach(([field, aliases]) => {
+          const idx = headers.findIndex(h => aliases.includes(h));
+          if (idx >= 0) fieldMap[field] = idx;
+        });
+        if (fieldMap.name === undefined) return toast.error("CSV must have a 'Name' column");
+        const parsed = rows.slice(1).map(row => {
+          const get = (field) => (fieldMap[field] !== undefined ? (row[fieldMap[field]] || "").trim() : "");
+          return {
+            name: get("name"),
+            company: get("company"),
+            role: get("role"),
+            email: get("email"),
+            phone: get("phone"),
+            address: get("address"),
+            city: get("city"),
+            state: get("state"),
+            pincode: get("pincode"),
+            salesperson: get("salesperson") || "Unassigned",
+            status: get("status") || "Cold",
+            notes: get("notes"),
+          };
+        }).filter(r => r.name);
+        if (parsed.length === 0) return toast.error("No valid rows found (name column is required)");
+        setImportRows(parsed);
+        setImportResult(null);
+        setShowImportModal(true);
+      } catch(e) { toast.error("Failed to parse CSV: " + e.message); }
+    };
+    reader.readAsText(file);
+    // Reset so same file can be re-selected
+    e.target.value = "";
+  }
+
+  async function runImport() {
+    if (importRows.length === 0) return;
+    setImporting(true);
+    let added = 0, skipped = 0;
+    try {
+      for (const row of importRows) {
+        if (!row.name) { skipped++; continue; }
+        // Check duplicate phone
+        if (row.phone) {
+          const dup = await checkDuplicatePhone(row.phone);
+          if (dup) { skipped++; continue; }
+        }
+        // For non-admins, always assign to themselves regardless of CSV
+        const finalRow = {
+          ...row,
+          salesperson: isAdmin ? (importSP !== "Unassigned" ? importSP : (row.salesperson || "Unassigned")) : mySalesperson,
+          archived: false,
+        };
+        await addContact(finalRow);
+        added++;
+      }
+      setImportResult({ added, skipped });
+      toast.success(`Import done: ${added} added, ${skipped} skipped`);
+      load();
+    } catch(e) { toast.error("Import failed: " + e.message); }
+    finally { setImporting(false); }
+  }
+
   function exportCSV() {
     const spName = currentUser?.salesperson||"";
     const exportData = isAdmin ? filtered : filtered.filter(c=>c.salesperson===spName);
@@ -267,6 +350,11 @@ export default function ContactsPage({ currentUser }) {
           <button className="btn btn-secondary" onClick={()=>setShowImport(true)}>
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/></svg>
             Import CSV
+          </button>
+          <button className="btn btn-secondary" onClick={() => importFileRef.current?.click()}>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+            Import CSV
+            <input ref={importFileRef} type="file" accept=".csv" style={{display:"none"}} onChange={handleFileSelect}/>
           </button>
           <button className="btn btn-secondary" onClick={exportCSV}>
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
@@ -510,175 +598,93 @@ export default function ContactsPage({ currentUser }) {
           onDone={()=>{ setShowImport(false); load(); }}
         />
       )}
-    </div>
-  );
-}
+      {/* ── Bulk Import Modal ──────────────────────────────── */}
+      {showImportModal && (
+        <Modal title={`Import contacts — ${importRows.length} rows found`} onClose={()=>{ setShowImportModal(false); setImportRows([]); setImportResult(null); }}>
+          <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
 
-// ── Import Modal ─────────────────────────────────────────────
-function ImportModal({ currentUser, isAdmin, salespersons, onClose, onDone }) {
-  const [step, setStep] = useState("upload"); // upload | preview | importing | done
-  const [rows, setRows] = useState([]);
-  const [fileName, setFileName] = useState("");
-  const [bulkSP, setBulkSP] = useState("__keep__");
-  const [progress, setProgress] = useState({ done:0, total:0 });
-  const [result, setResult] = useState({ imported:0, skipped:0, skippedNames:[] });
-  const fileRef = useRef(null);
-
-  function handleFile(e) {
-    const file = e.target.files[0];
-    if(!file) return;
-    setFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = ev => {
-      try {
-        const parsed = parseCSV(ev.target.result);
-        if(parsed.length<2) return toast.error("CSV is empty or has no data rows");
-        const mapping = detectColumns(parsed[0]);
-        if(mapping.name===undefined) return toast.error("No 'Name' column found. Check CSV headers.");
-        let contacts = rowsToContacts(parsed, mapping);
-        // Salesperson: force-assign to themselves
-        if(!isAdmin) contacts = contacts.map(c=>({...c, salesperson: currentUser?.salesperson||"Unassigned"}));
-        setRows(contacts);
-        setStep("preview");
-      } catch(err) { toast.error("Failed to parse: "+err.message); }
-    };
-    reader.readAsText(file);
-  }
-
-  function applyBulkSP(val) {
-    setBulkSP(val);
-    if(val!=="__keep__") setRows(rs=>rs.map(r=>({...r,salesperson:val})));
-  }
-
-  async function runImport() {
-    setStep("importing");
-    setProgress({ done:0, total:rows.length });
-    let imported=0, skipped=0;
-    const skippedNames=[];
-    for(const contact of rows) {
-      try {
-        if(contact.phone) {
-          const isDup = await checkDuplicatePhone(contact.phone);
-          if(isDup){ skipped++; skippedNames.push(`${contact.name} (duplicate phone)`); setProgress(p=>({...p,done:p.done+1})); continue; }
-        }
-        await addContact(contact);
-        imported++;
-      } catch { skipped++; skippedNames.push(`${contact.name} (save error)`); }
-      setProgress(p=>({...p,done:p.done+1}));
-    }
-    try { await logAction(currentUser,"Bulk Imported Contacts",{count:imported,fileName}); } catch {}
-    setResult({imported,skipped,skippedNames});
-    setStep("done");
-  }
-
-  return (
-    <Modal title="Import contacts from CSV" onClose={onClose}>
-      <div className="space-y-4">
-        {step==="upload"&&(
-          <>
-            <div className="border-2 border-dashed border-gray-200 rounded-xl p-8 text-center cursor-pointer hover:border-indigo-300 transition-colors" onClick={()=>fileRef.current?.click()}>
-              <svg className="w-10 h-10 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/></svg>
-              <p className="text-sm font-medium text-gray-600 mb-1">Click to upload CSV file</p>
-              <p className="text-xs text-gray-400">Name, Company, Phone, Email, City, Pincode, Status…</p>
-              <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleFile} />
-            </div>
-            <div className={`rounded-lg p-3 text-xs ${isAdmin?"bg-blue-50 border border-blue-100 text-blue-700":"bg-amber-50 border border-amber-100 text-amber-700"}`}>
-              {isAdmin
-                ?"ℹ️ Admin: you can bulk-assign all imported contacts to one salesperson in the next step."
-                :`ℹ️ All imported contacts will be assigned to you (${currentUser?.salesperson||"your account"}) automatically.`}
-            </div>
-            <p className="text-xs text-gray-400">Expected columns (any order): <strong>Name*</strong>, Company, Role, Email, Phone, Address, City, State, Pincode, Status, Notes</p>
-          </>
-        )}
-
-        {step==="preview"&&(
-          <>
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-gray-700">📄 {rows.length} contacts in <span className="font-semibold">{fileName}</span></p>
-              <button onClick={()=>setStep("upload")} className="text-xs text-indigo-600 hover:underline">Change file</button>
-            </div>
-
-            {isAdmin&&(
-              <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-3">
-                <label className="block text-xs font-semibold text-indigo-700 mb-1.5">Assign all imported contacts to</label>
-                <select className="input" value={bulkSP} onChange={e=>applyBulkSP(e.target.value)}>
-                  <option value="__keep__">Keep as in CSV (per-row salesperson)</option>
-                  <option value="Unassigned">Unassigned</option>
+            {/* Admin salesperson override */}
+            {isAdmin && !importResult && (
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">
+                  Assign all imported contacts to
+                </label>
+                <select className="input" value={importSP} onChange={e=>setImportSP(e.target.value)}>
+                  <option value="Unassigned">Unassigned (use CSV column if present)</option>
                   {salespersons.map(s=><option key={s.id} value={s.name}>{s.name}</option>)}
                 </select>
+                <p className="text-xs text-gray-400 mt-1">Selecting a name here overrides any salesperson value in the CSV.</p>
               </div>
             )}
 
-            {/* Preview table */}
-            <div className="border border-gray-100 rounded-lg overflow-hidden max-h-60 overflow-y-auto">
-              <table className="w-full text-xs">
-                <thead className="bg-gray-50 sticky top-0">
-                  <tr>
-                    <th className="text-left px-3 py-2 font-semibold text-gray-500">#</th>
-                    <th className="text-left px-3 py-2 font-semibold text-gray-500">Name</th>
-                    <th className="text-left px-3 py-2 font-semibold text-gray-500">Company</th>
-                    <th className="text-left px-3 py-2 font-semibold text-gray-500">Phone</th>
-                    <th className="text-left px-3 py-2 font-semibold text-gray-500">Assigned to</th>
-                    <th className="text-left px-3 py-2 font-semibold text-gray-500">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.slice(0,100).map((c,i)=>(
-                    <tr key={i} className="border-t border-gray-50">
-                      <td className="px-3 py-1.5 text-gray-400">{i+1}</td>
-                      <td className="px-3 py-1.5 text-gray-800 font-medium">{c.name}</td>
-                      <td className="px-3 py-1.5 text-gray-500">{c.company||"—"}</td>
-                      <td className="px-3 py-1.5 text-gray-500">{c.phone||"—"}</td>
-                      <td className="px-3 py-1.5 text-purple-600">{c.salesperson}</td>
-                      <td className="px-3 py-1.5">
-                        <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${c.status==="Hot"?"bg-red-100 text-red-600":c.status==="Warm"?"bg-amber-100 text-amber-600":"bg-blue-100 text-blue-600"}`}>{c.status}</span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {rows.length>100&&<p className="text-xs text-gray-400 text-center py-2">...and {rows.length-100} more</p>}
-            </div>
-
-            <div className="flex gap-3">
-              <button className="btn btn-secondary flex-1" onClick={onClose}>Cancel</button>
-              <button className="btn btn-primary flex-1" onClick={runImport}
-                style={{background:"linear-gradient(135deg,#6366f1,#8b5cf6)",border:"none"}}>
-                Import {rows.length} contacts →
-              </button>
-            </div>
-          </>
-        )}
-
-        {step==="importing"&&(
-          <div className="text-center py-10">
-            <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-4"/>
-            <p className="text-sm text-gray-600 font-medium">Importing {progress.done} of {progress.total}...</p>
-            <div className="w-full bg-gray-100 rounded-full h-2.5 mt-3 max-w-xs mx-auto">
-              <div className="h-2.5 bg-indigo-500 rounded-full transition-all" style={{width:`${progress.total?(progress.done/progress.total)*100:0}%`}}/>
-            </div>
-          </div>
-        )}
-
-        {step==="done"&&(
-          <div className="text-center py-4">
-            <p className="text-4xl mb-3">✅</p>
-            <p className="text-lg font-bold text-gray-800">{result.imported} contacts imported!</p>
-            {result.skipped>0&&(
+            {/* Result screen */}
+            {importResult ? (
+              <div className="text-center py-6">
+                <p style={{fontSize:"40px",marginBottom:"12px"}}>✅</p>
+                <p className="text-lg font-bold text-gray-900">{importResult.added} contacts imported</p>
+                {importResult.skipped > 0 && <p className="text-sm text-amber-600 mt-1">{importResult.skipped} skipped (duplicate phone or missing name)</p>}
+                <button className="btn btn-primary mt-4" style={{background:"linear-gradient(135deg,#6366f1,#8b5cf6)",border:"none"}}
+                  onClick={()=>{ setShowImportModal(false); setImportRows([]); setImportResult(null); }}>
+                  Done
+                </button>
+              </div>
+            ) : (
               <>
-                <p className="text-sm text-amber-600 mt-1">{result.skipped} skipped</p>
-                <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 mt-3 max-h-36 overflow-y-auto text-left">
-                  {result.skippedNames.map((n,i)=><p key={i} className="text-xs text-amber-700">· {n}</p>)}
+                {/* Preview table */}
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 mb-2">Preview (first 5 rows)</p>
+                  <div className="overflow-x-auto rounded-lg border border-gray-100">
+                    <table className="w-full text-xs">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          {["Name","Company","Phone","City","Salesperson","Status"].map(h=>(
+                            <th key={h} className="text-left px-3 py-2 text-gray-500 font-medium">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {importRows.slice(0,5).map((r,i)=>(
+                          <tr key={i} className="border-t border-gray-50">
+                            <td className="px-3 py-2 font-medium text-gray-800">{r.name}</td>
+                            <td className="px-3 py-2 text-gray-500">{r.company||"—"}</td>
+                            <td className="px-3 py-2 text-gray-500">{r.phone||"—"}</td>
+                            <td className="px-3 py-2 text-gray-500">{r.city||"—"}</td>
+                            <td className="px-3 py-2 text-gray-500">
+                              {isAdmin ? (importSP !== "Unassigned" ? importSP : (r.salesperson||"Unassigned")) : mySalesperson}
+                            </td>
+                            <td className="px-3 py-2"><span className={`badge badge-${(r.status||"cold").toLowerCase()}`}>{r.status||"Cold"}</span></td>
+                          </tr>
+                        ))}
+                        {importRows.length > 5 && (
+                          <tr><td colSpan={6} className="px-3 py-2 text-gray-400 text-center">... and {importRows.length-5} more rows</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs text-blue-700">
+                  <p className="font-semibold mb-1">ℹ️ Import rules:</p>
+                  <ul className="space-y-0.5 list-disc list-inside">
+                    <li>Contacts with duplicate phone numbers will be skipped</li>
+                    <li>Rows without a name will be skipped</li>
+                    {!isAdmin && <li>All contacts will be assigned to you ({mySalesperson})</li>}
+                    {isAdmin && importSP !== "Unassigned" && <li>All contacts will be assigned to {importSP}</li>}
+                  </ul>
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button className="btn btn-secondary flex-1" onClick={()=>{ setShowImportModal(false); setImportRows([]); }}>Cancel</button>
+                  <button className="btn btn-primary flex-1" onClick={runImport} disabled={importing}
+                    style={{background:"linear-gradient(135deg,#6366f1,#8b5cf6)",border:"none"}}>
+                    {importing ? `Importing... (${importRows.length} rows)` : `Import ${importRows.length} contacts`}
+                  </button>
                 </div>
               </>
             )}
-            <button className="btn btn-primary w-full mt-5" onClick={onDone}
-              style={{background:"linear-gradient(135deg,#6366f1,#8b5cf6)",border:"none"}}>
-              Done — view contacts
-            </button>
           </div>
-        )}
-      </div>
-    </Modal>
+        </Modal>
+      )}
+    </div>
   );
 }
