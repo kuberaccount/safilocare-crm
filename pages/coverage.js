@@ -6,17 +6,36 @@ import { getSalespersons } from "../lib/firebase";
 
 // Fetch ALL contacts and deals directly — bypasses any salesperson filter
 // so every user sees the full picture for reference lookups.
+// ✅ SAFE FETCH (NO INDEX REQUIRED)
 async function fetchAll() {
-  const [cSnap, dSnap, aSnap] = await Promise.all([
-    getDocs(query(collection(db, "contacts"), orderBy("createdAt", "desc"))),
-    getDocs(query(collection(db, "deals"),    orderBy("createdAt", "desc"))),
-    getDocs(query(collection(db, "activities"), orderBy("createdAt", "desc"))),
-  ]);
-  return {
-    contacts:   cSnap.docs.map(d => ({ id: d.id, ...d.data() })),
-    deals:      dSnap.docs.map(d => ({ id: d.id, ...d.data() })),
-    activities: aSnap.docs.map(d => ({ id: d.id, ...d.data() })),
-  };
+  try {
+    const [cSnap, dSnap, aSnap] = await Promise.all([
+      getDocs(collection(db, "contacts")),
+      getDocs(collection(db, "deals")),
+      getDocs(collection(db, "activities")),
+    ]);
+
+    const safeSort = (arr) =>
+      arr.sort(
+        (a, b) =>
+          (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)
+      );
+
+    return {
+      contacts: safeSort(
+        cSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
+      ),
+      deals: safeSort(
+        dSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
+      ),
+      activities: safeSort(
+        aSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
+      ),
+    };
+  } catch (err) {
+    console.error("🔥 FETCH ERROR:", err);
+    return { contacts: [], deals: [], activities: [] };
+  }
 }
 
 const REFERENCE_READY_MIN = 2;
@@ -68,8 +87,9 @@ export default function CoveragePage({ currentUser }) {
   const { contacts, deals, activities } = allData;
 
   // Skip archived and soft-deleted contacts
-  const activeContacts = contacts.filter(c => !c.archived && !c.deleted);
-
+ const activeContacts = contacts.filter(
+  c => c && !c.archived && !c.deleted && (c.name || c.phone)
+);
   // Build quick lookups
   const dealsByContactName = {};
   deals.forEach(d => {
