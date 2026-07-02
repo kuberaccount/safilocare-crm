@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { useState, useEffect, useRef } from "react";
 import { getContacts, addContact, updateContact, deleteContact, checkDuplicatePhone, getSalespersons, addSalesperson, deleteSalesperson } from "../lib/firebase";
+import { softDeleteContact, restoreContact, permanentDeleteContact, getDeletedContacts } from "../lib/firebase";
 import { logAction } from "../lib/activitylog";
 import Modal from "../components/Modal";
 import toast from "react-hot-toast";
@@ -111,6 +112,9 @@ export default function ContactsPage({ currentUser }) {
   const [filterSP, setFilterSP] = useState("All");
   const [filterStatus, setFilterStatus] = useState("All");
   const [showArchived, setShowArchived] = useState(false);
+  const [showRecycleBin, setShowRecycleBin] = useState(false);
+  const [deletedContacts, setDeletedContacts] = useState([]);
+  const [loadingBin, setLoadingBin] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editContact, setEditContact] = useState(null);
   const [showSPModal, setShowSPModal] = useState(false);
@@ -200,13 +204,47 @@ export default function ContactsPage({ currentUser }) {
   }
 
   async function remove(id, name) {
-    if(!confirm("Permanently delete this contact?")) return;
+    if(!confirm(`Move "${name}" to recycle bin?`)) return;
     try {
-      await deleteContact(id);
+      await softDeleteContact(id, currentUser?.name || currentUser?.email || "");
       try { await logAction(currentUser, "Deleted Contact", { contactName: name||id }); } catch {}
-      toast.success("Deleted");
+      toast.success("Moved to recycle bin 🗑");
       setContacts(c => c.filter(x => x.id !== id));
     } catch { toast.error("Failed to delete"); }
+  }
+
+  async function loadRecycleBin() {
+    setLoadingBin(true);
+    try {
+      const sp = isAdmin ? null : currentUser?.salesperson;
+      const deleted = await getDeletedContacts(sp);
+      setDeletedContacts(deleted);
+    } catch { toast.error("Could not load recycle bin"); }
+    finally { setLoadingBin(false); }
+  }
+
+  async function restore(id, name) {
+    try {
+      await restoreContact(id);
+      toast.success(`"${name}" restored ✅`);
+      setDeletedContacts(d => d.filter(c => c.id !== id));
+      load();
+    } catch { toast.error("Failed to restore"); }
+  }
+
+  async function permanentDelete(id, name) {
+    if(!confirm(`Permanently delete "${name}"? This CANNOT be undone.`)) return;
+    try {
+      await permanentDeleteContact(id);
+      toast.success("Permanently deleted");
+      setDeletedContacts(d => d.filter(c => c.id !== id));
+    } catch { toast.error("Failed"); }
+  }
+
+  function fmtDate(ts) {
+    if (!ts) return "—";
+    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    return d.toLocaleDateString("en-IN", { day:"2-digit", month:"short", year:"numeric" });
   }
 
   async function handleAddSP() {
@@ -338,6 +376,7 @@ export default function ContactsPage({ currentUser }) {
           <h1 className="text-xl font-bold text-gray-900">Contacts</h1>
           <p className="text-sm text-gray-500">{filtered.length} of {contacts.filter(c=>!c.archived).length} contacts
             {contacts.filter(c=>c.archived).length>0&&<span className="ml-2 text-amber-600">· {contacts.filter(c=>c.archived).length} archived</span>}
+            <button onClick={()=>{ setShowRecycleBin(v=>{ if(!v) loadRecycleBin(); return !v; }); }} className="ml-3 text-xs text-red-400 hover:text-red-600">🗑 Recycle bin</button>
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -544,7 +583,62 @@ export default function ContactsPage({ currentUser }) {
         </Modal>
       )}
 
-      {/* Manage Salespersons Modal */}
+      {/* ── Recycle Bin ──────────────────────────────────────────────── */}
+      {showRecycleBin && (
+        <div className="mt-6">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <p className="text-sm font-semibold text-gray-700">🗑 Recycle Bin <span className="text-xs font-normal text-gray-400">({deletedContacts.length})</span></p>
+              <p className="text-xs text-gray-400 mt-0.5">Deleted contacts are kept here. Restore to bring them back, or permanently delete to remove forever.</p>
+            </div>
+            <button onClick={()=>setShowRecycleBin(false)} className="text-xs text-gray-400 hover:text-gray-600">Hide</button>
+          </div>
+          {loadingBin ? (
+            <div className="card p-6 text-center text-gray-400 text-sm">Loading...</div>
+          ) : deletedContacts.length === 0 ? (
+            <div className="card p-8 text-center text-gray-400 text-sm">✅ Recycle bin is empty.</div>
+          ) : (
+            <div className="card overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    {["Name","Company","Phone","Deleted by","Deleted on",""].map(h=>(
+                      <th key={h} className="text-left px-4 py-3 text-xs font-medium text-gray-400 uppercase">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {deletedContacts.map(c => (
+                    <tr key={c.id} className="border-b border-gray-50 hover:bg-red-50">
+                      <td className="px-4 py-3 font-medium text-gray-700">{c.name}</td>
+                      <td className="px-4 py-3 text-gray-500">{c.company||"—"}</td>
+                      <td className="px-4 py-3 text-gray-500">{c.phone||"—"}</td>
+                      <td className="px-4 py-3 text-gray-400 text-xs">{c.deletedBy||"—"}</td>
+                      <td className="px-4 py-3 text-gray-400 text-xs">{fmtDate(c.deletedAt)}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-2">
+                          <button onClick={()=>restore(c.id, c.name)}
+                            className="text-xs text-indigo-600 hover:text-indigo-800 font-medium px-2 py-1 rounded hover:bg-indigo-50">
+                            ↩ Restore
+                          </button>
+                          {isAdmin && (
+                            <button onClick={()=>permanentDelete(c.id, c.name)}
+                              className="text-xs text-red-400 hover:text-red-600 font-medium px-2 py-1 rounded hover:bg-red-50">
+                              Delete forever
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Add/Edit Contact Modal */}
       {showSPModal&&(
         <Modal title="Manage Salespersons" onClose={()=>setShowSPModal(false)}>
           <div className="space-y-4">
