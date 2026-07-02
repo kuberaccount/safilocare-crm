@@ -1,72 +1,83 @@
 import { useEffect, useState } from "react";
-import {
-  collection,
-  getDocs,
-  addDoc,
-  deleteDoc,
-  doc,
-  updateDoc,
-  serverTimestamp,
-} from "firebase/firestore";
-import { db } from "../lib/firebase"; // ✅ FINAL
+import { getCoverageReport, getSalespersons } from "../firebase";
 
 export default function Coverage() {
-  const [coverageList, setCoverageList] = useState([]);
-  const [name, setName] = useState("");
-
-  const coverageRef = collection(db, "coverage");
-
-  const fetchCoverage = async () => {
-    const data = await getDocs(coverageRef);
-    setCoverageList(data.docs.map(d => ({ id: d.id, ...d.data() })));
-  };
+  const [data, setData] = useState([]);
+  const [salespersons, setSalespersons] = useState([]);
+  const [filters, setFilters] = useState({
+    city: "",
+    state: "",
+    pincode: "",
+  });
 
   useEffect(() => {
-    fetchCoverage();
+    loadData();
   }, []);
 
-  const handleAdd = async () => {
-    if (!name) return;
-    await addDoc(coverageRef, {
-      name,
-      createdAt: serverTimestamp(),
-    });
-    setName("");
-    fetchCoverage();
+  const loadData = async () => {
+    const res = await getCoverageReport(filters);
+    const sp = await getSalespersons();
+    setData(res);
+    setSalespersons(sp);
   };
 
-  const handleDelete = async (id) => {
-    await deleteDoc(doc(db, "coverage", id));
-    fetchCoverage();
-  };
-
-  const handleUpdate = async (id) => {
-    const newName = prompt("New name");
-    if (!newName) return;
-    await updateDoc(doc(db, "coverage", id), { name: newName });
-    fetchCoverage();
+  const handleAssign = async (item, salesperson) => {
+    alert(`Assign new lead to ${salesperson} for ${item.city || item.pincode}`);
   };
 
   return (
     <div style={{ padding: 20 }}>
-      <h2>Coverage</h2>
+      <h2>Coverage Intelligence</h2>
 
-      <input
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="Enter name"
-      />
-      <button onClick={handleAdd}>Add</button>
+      <div style={{ marginBottom: 20 }}>
+        <input
+          placeholder="City"
+          value={filters.city}
+          onChange={(e) => setFilters({ ...filters, city: e.target.value })}
+        />
+        <input
+          placeholder="State"
+          value={filters.state}
+          onChange={(e) => setFilters({ ...filters, state: e.target.value })}
+        />
+        <input
+          placeholder="Pincode"
+          value={filters.pincode}
+          onChange={(e) => setFilters({ ...filters, pincode: e.target.value })}
+        />
+        <button onClick={loadData}>Search</button>
+      </div>
 
-      <ul>
-        {coverageList.map((item) => (
-          <li key={item.id}>
-            {item.name}
-            <button onClick={() => handleUpdate(item.id)}>Edit</button>
-            <button onClick={() => handleDelete(item.id)}>Delete</button>
-          </li>
-        ))}
-      </ul>
+      <table border="1" cellPadding="8">
+        <thead>
+          <tr>
+            <th>City</th>
+            <th>State</th>
+            <th>Pincode</th>
+            <th>Total Contacts</th>
+            <th>Salespersons</th>
+            <th>Assign Lead</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((row, i) => (
+            <tr key={i}>
+              <td>{row.city}</td>
+              <td>{row.state}</td>
+              <td>{row.pincode}</td>
+              <td>{row.count}</td>
+              <td>{row.salespersons.join(", ")}</td>
+              <td>
+                {row.salespersons.map((sp, idx) => (
+                  <button key={idx} onClick={() => handleAssign(row, sp)}>
+                    {sp}
+                  </button>
+                ))}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
