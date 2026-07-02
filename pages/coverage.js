@@ -15,11 +15,11 @@ async function fetchAll() {
     cSnap = { docs: [] }; // Fallback to empty if it fails
   }
 
-  try {
-    dSnap = await getDocs(collection(db, "deals"));
+try {
+    dSnap = await getDocs(collection(db, "pipeline")); 
   } catch (e) {
-    console.error("Firebase 'deals' collection error:", e);
-    dSnap = { docs: [] }; // Fallback to empty if it fails
+    console.error("Firebase 'pipeline' collection error:", e);
+    dSnap = { docs: [] };
   }
 
   try {
