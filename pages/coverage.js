@@ -1,16 +1,15 @@
 import React, { useState, useEffect } from "react";
 import toast from "react-hot-toast";
 import { db } from "../lib/firebase";
-import { collection, getDocs, query, orderBy } from "firebase/firestore";
+import { collection, getDocs } from "firebase/firestore";
 import { getSalespersons } from "../lib/firebase";
 
-// Fetch ALL contacts and deals directly — bypasses any salesperson filter
-// so every user sees the full picture for reference lookups.
+// ── Fetch all data without orderBy — avoids composite index requirement ──
 async function fetchAll() {
   const [cSnap, dSnap, aSnap] = await Promise.all([
-    getDocs(query(collection(db, "contacts"), orderBy("createdAt", "desc"))),
-    getDocs(query(collection(db, "deals"),    orderBy("createdAt", "desc"))),
-    getDocs(query(collection(db, "activities"), orderBy("createdAt", "desc"))),
+    getDocs(collection(db, "contacts")),
+    getDocs(collection(db, "deals")),
+    getDocs(collection(db, "activities")),
   ]);
   return {
     contacts:   cSnap.docs.map(d => ({ id: d.id, ...d.data() })),
@@ -45,14 +44,22 @@ export default function CoveragePage({ currentUser }) {
   const [allData, setAllData] = useState({ contacts: [], deals: [], activities: [] });
   const [salespersons, setSalespersons] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [search, setSearch] = useState("");
   const [filterSP, setFilterSP] = useState("All");
   const [expandedKey, setExpandedKey] = useState(null);
 
   useEffect(() => {
     Promise.all([fetchAll(), getSalespersons()])
-      .then(([data, sps]) => { setAllData(data); setSalespersons(sps); })
-      .catch(e => { console.error(e); toast.error("Could not load coverage data"); })
+      .then(([data, sps]) => {
+        setAllData(data);
+        setSalespersons(sps);
+      })
+      .catch(e => {
+        console.error("Coverage load error:", e);
+        setError(e.message || "Unknown error");
+        toast.error("Could not load coverage data");
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -65,26 +72,51 @@ export default function CoveragePage({ currentUser }) {
     </div>
   );
 
+  if (error) return (
+    <div className="p-6 max-w-lg mx-auto mt-10">
+      <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
+        <p className="text-2xl mb-2">⚠️</p>
+        <p className="text-sm font-semibold text-red-700 mb-1">Could not load coverage data</p>
+        <p className="text-xs text-red-500">{error}</p>
+        <button onClick={() => window.location.reload()} className="mt-4 btn btn-secondary text-sm">Retry</button>
+      </div>
+    </div>
+  );
+
   const { contacts, deals, activities } = allData;
 
-  // Skip archived and soft-deleted contacts
+  // Exclude archived and soft-deleted contacts
   const activeContacts = contacts.filter(c => !c.archived && !c.deleted);
 
-  // Build quick lookups
+  if (activeContacts.length === 0) return (
+    <div className="p-6 max-w-2xl">
+      <h1 className="text-xl font-bold text-gray-900 mb-2">Coverage</h1>
+      <div className="card p-10 text-center text-gray-400">
+        <p className="text-3xl mb-3">📍</p>
+        <p className="text-sm font-medium">No contacts with location data yet</p>
+        <p className="text-xs mt-1">Add city, state or pincode when creating contacts to see coverage here.</p>
+      </div>
+    </div>
+  );
+
+  // Build deal lookup by contact name
   const dealsByContactName = {};
   deals.forEach(d => {
     const key = (d.contact || "").trim().toLowerCase();
     if (!key) return;
-    (dealsByContactName[key] = dealsByContactName[key] || []).push(d);
+    if (!dealsByContactName[key]) dealsByContactName[key] = [];
+    dealsByContactName[key].push(d);
   });
 
+  // Build activity lookup by dealId
   const actsByDealId = {};
   activities.forEach(a => {
     if (!a.dealId) return;
-    (actsByDealId[a.dealId] = actsByDealId[a.dealId] || []).push(a);
+    if (!actsByDealId[a.dealId]) actsByDealId[a.dealId] = [];
+    actsByDealId[a.dealId].push(a);
   });
 
-  // Enrich each contact with their deal + activity data
+  // Enrich each contact with deal + activity stats
   const enriched = activeContacts.map(c => {
     const key = (c.name || "").trim().toLowerCase();
     const cDeals = dealsByContactName[key] || [];
@@ -97,11 +129,11 @@ export default function CoveragePage({ currentUser }) {
     };
   });
 
-  // Group by state|city|pincode
+  // Group by state + city + pincode
   const areaMap = {};
   enriched.forEach(c => {
-    const state   = (c.state   || "").trim().toUpperCase() || "Unknown State";
-    const city    = (c.city    || "").trim().toUpperCase() || "Unknown City";
+    const state   = (c.state   || "").trim().toUpperCase() || "UNKNOWN STATE";
+    const city    = (c.city    || "").trim().toUpperCase() || "UNKNOWN CITY";
     const pincode = (c.pincode || "").trim()               || "—";
     const key = `${state}|${city}|${pincode}`;
     if (!areaMap[key]) areaMap[key] = { state, city, pincode, contacts: [] };
@@ -109,26 +141,27 @@ export default function CoveragePage({ currentUser }) {
   });
 
   let allAreas = Object.values(areaMap).map(area => {
-    const refs = area.contacts.filter(c => c.isCredibleReference);
+    const refs   = area.contacts.filter(c => c.isCredibleReference);
     const owners = [...new Set(area.contacts.map(c => c.salesperson).filter(s => s && s !== "Unassigned"))];
     const hasFilterSP = filterSP !== "All" && area.contacts.some(c => c.salesperson === filterSP);
     return {
       ...area,
       contactCount:   area.contacts.length,
       referenceCount: refs.length,
-      activeCount:    area.contacts.reduce((s,c) => s+c.activeDealCount, 0),
-      wonCount:       area.contacts.reduce((s,c) => s+c.wonDealCount, 0),
+      activeCount:    area.contacts.reduce((s,c) => s + c.activeDealCount, 0),
+      wonCount:       area.contacts.reduce((s,c) => s + c.wonDealCount,    0),
       owners,
       hasFilterSP,
       referenceReady: refs.length >= REFERENCE_READY_MIN,
     };
   }).sort((a,b) => b.contactCount - a.contactCount);
 
-  // When SP filter active, float their areas to top
+  // Float SP-filtered areas to top
   if (filterSP !== "All") {
     allAreas = [...allAreas].sort((a,b) => (b.hasFilterSP?1:0) - (a.hasFilterSP?1:0));
   }
 
+  // Search filter
   const q = search.trim().toLowerCase();
   const matchedAreas = q
     ? allAreas.filter(a =>
@@ -138,24 +171,25 @@ export default function CoveragePage({ currentUser }) {
       )
     : allAreas;
 
-  // City-level rollup (only when searching)
+  // City-level rollup (shown when searching)
   const cityRollup = q
     ? [...new Set(matchedAreas.map(a => `${a.state}|${a.city}`))].map(ck => {
         const [state, city] = ck.split("|");
         const cityAreas = allAreas.filter(a => a.state === state && a.city === city);
         return {
           state, city,
-          contactCount:   cityAreas.reduce((s,a) => s+a.contactCount, 0),
+          contactCount:   cityAreas.reduce((s,a) => s+a.contactCount,   0),
           referenceCount: cityAreas.reduce((s,a) => s+a.referenceCount, 0),
-          activeCount:    cityAreas.reduce((s,a) => s+a.activeCount, 0),
-          wonCount:       cityAreas.reduce((s,a) => s+a.wonCount, 0),
+          activeCount:    cityAreas.reduce((s,a) => s+a.activeCount,     0),
+          wonCount:       cityAreas.reduce((s,a) => s+a.wonCount,        0),
           owners:         [...new Set(cityAreas.flatMap(a => a.owners))],
           pincodeCount:   cityAreas.length,
         };
       })
     : [];
 
-  const referenceReadyAreas = allAreas.filter(a => a.referenceReady)
+  const referenceReadyAreas = allAreas
+    .filter(a => a.referenceReady)
     .sort((a,b) => b.referenceCount - a.referenceCount);
 
   return (
@@ -165,14 +199,11 @@ export default function CoveragePage({ currentUser }) {
         <div>
           <h1 className="text-xl font-bold text-gray-900">Coverage</h1>
           <p className="text-sm text-gray-500">
-            {activeContacts.length} contacts across {allAreas.length} areas — search by pincode, city, or state to find references near a new lead.
+            {activeContacts.length} contacts · {allAreas.length} areas · search pincode, city or state to find references near a new lead
           </p>
         </div>
-        <button onClick={() => exportCSV(matchedAreas, filterSP)}
-          style={{display:"inline-flex",alignItems:"center",gap:"6px",padding:"7px 14px",borderRadius:"8px",border:"1px solid #16a34a",background:"#f0fdf4",color:"#16a34a",fontSize:"13px",fontWeight:600,cursor:"pointer"}}
-          onMouseOver={e=>{e.currentTarget.style.background="#16a34a";e.currentTarget.style.color="white";}}
-          onMouseOut={e=>{e.currentTarget.style.background="#f0fdf4";e.currentTarget.style.color="#16a34a";}}>
-          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <button onClick={() => exportCSV(matchedAreas, filterSP)} className="btn btn-secondary">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
           </svg>
           Export CSV
@@ -195,12 +226,27 @@ export default function CoveragePage({ currentUser }) {
           </select>
         </div>
         <p className="text-xs text-gray-400 mt-2">
-          Visible to everyone — use this to check if existing customers are near a new lead before your first visit.
-          {filterSP !== "All" && " Areas with this salesperson's contacts are sorted to the top and highlighted."}
+          Use this to check if existing customers are near a new lead before a visit.
+          {filterSP !== "All" && " This salesperson's areas are highlighted and sorted to the top."}
         </p>
       </div>
 
-      {/* City rollup — only when searching */}
+      {/* Stats bar */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+        {[
+          { label:"Total contacts", value: activeContacts.length, color:"text-gray-800" },
+          { label:"Areas covered",  value: allAreas.length,       color:"text-indigo-700" },
+          { label:"Reference-ready",value: referenceReadyAreas.length, color:"text-green-700" },
+          { label:"Active leads",   value: allAreas.reduce((s,a)=>s+a.activeCount,0), color:"text-blue-700" },
+        ].map(s => (
+          <div key={s.label} className="card p-4">
+            <p className="text-xs text-gray-400 mb-1">{s.label}</p>
+            <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* City rollup (search only) */}
       {q && cityRollup.length > 0 && (
         <div className="mb-4">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">City overview</p>
@@ -209,14 +255,14 @@ export default function CoveragePage({ currentUser }) {
               <div key={`${c.state}|${c.city}`} className="card p-4">
                 <p className="text-sm font-semibold text-gray-900">{c.city}</p>
                 <p className="text-xs text-gray-400 mb-2">{c.state} · {c.pincodeCount} pincode{c.pincodeCount!==1?"s":""}</p>
-                <div className="grid grid-cols-2 gap-1.5 text-xs mb-2">
+                <div className="grid grid-cols-2 gap-1 text-xs mb-2">
                   <div><span className="text-gray-400">Contacts </span><span className="font-semibold">{c.contactCount}</span></div>
-                  <div><span className="text-gray-400">References </span><span className="font-semibold">{c.referenceCount}</span></div>
-                  <div><span className="text-gray-400">Active leads </span><span className="font-semibold text-blue-600">{c.activeCount}</span></div>
+                  <div><span className="text-gray-400">Refs </span><span className="font-semibold">{c.referenceCount}</span></div>
+                  <div><span className="text-gray-400">Active </span><span className="font-semibold text-blue-600">{c.activeCount}</span></div>
                   <div><span className="text-gray-400">Won </span><span className="font-semibold text-green-600">{c.wonCount}</span></div>
                 </div>
                 {c.owners.length > 0 && (
-                  <p className="text-xs text-gray-400">Covered by: <span className="font-medium text-gray-700">{c.owners.join(", ")}</span></p>
+                  <p className="text-xs text-gray-400">By: <span className="font-medium text-gray-700">{c.owners.join(", ")}</span></p>
                 )}
               </div>
             ))}
@@ -229,7 +275,7 @@ export default function CoveragePage({ currentUser }) {
         {matchedAreas.length === 0 ? (
           <div className="p-10 text-center text-gray-400 text-sm">
             <p className="text-2xl mb-2">📍</p>
-            {q ? "No contacts found matching that search." : "No contacts with location data yet — add city/state/pincode when creating contacts."}
+            {q ? "No contacts match that search." : "No location data found."}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -281,7 +327,9 @@ export default function CoveragePage({ currentUser }) {
                             <div className="space-y-1.5">
                               {area.contacts
                                 .slice()
-                                .sort((a,b) => filterSP!=="All" ? (b.salesperson===filterSP?1:0)-(a.salesperson===filterSP?1:0) : 0)
+                                .sort((a,b) => filterSP!=="All"
+                                  ? (b.salesperson===filterSP?1:0)-(a.salesperson===filterSP?1:0)
+                                  : 0)
                                 .map(c => {
                                   const isMine = filterSP !== "All" && c.salesperson === filterSP;
                                   return (
@@ -305,11 +353,11 @@ export default function CoveragePage({ currentUser }) {
                                         {c.wonDealCount > 0 && <span className="text-green-600 font-semibold">Won ✓</span>}
                                         {c.isCredibleReference
                                           ? <span className="bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium">Reference ✓</span>
-                                          : <span className="bg-gray-50 text-gray-400 px-2 py-0.5 rounded-full">No activity</span>}
+                                          : <span className="bg-gray-50 text-gray-400 px-2 py-0.5 rounded-full">No activity yet</span>}
                                       </div>
                                     </div>
                                   );
-                              })}
+                                })}
                             </div>
                           </td>
                         </tr>
@@ -323,20 +371,25 @@ export default function CoveragePage({ currentUser }) {
         )}
       </div>
 
-      {/* Reference-ready areas */}
+      {/* Reference-ready pills */}
       {referenceReadyAreas.length > 0 && (
         <div className="mt-6">
-          <p className="text-sm font-semibold text-gray-700 mb-2">📍 Reference-ready areas <span className="text-xs font-normal text-gray-400">— {REFERENCE_READY_MIN}+ active contacts</span></p>
+          <p className="text-sm font-semibold text-gray-700 mb-2">
+            📍 Reference-ready areas
+            <span className="text-xs font-normal text-gray-400 ml-1">— {REFERENCE_READY_MIN}+ contacts with activity</span>
+          </p>
           <div className="flex flex-wrap gap-2">
             {referenceReadyAreas.slice(0,30).map(a => (
               <button key={`${a.state}|${a.city}|${a.pincode}`}
                 onClick={() => { setSearch(a.pincode !== "—" ? a.pincode : a.city); setExpandedKey(null); }}
-                className={`text-xs px-3 py-1.5 rounded-full font-medium border transition-all hover:shadow-sm ${a.hasFilterSP ? "bg-indigo-50 text-indigo-700 border-indigo-200" : "bg-green-50 text-green-700 border-green-100"}`}>
-                {a.city} {a.pincode !== "—" && `(${a.pincode})`} — {a.referenceCount} contacts{a.owners.length > 0 && ` · ${a.owners[0]}${a.owners.length>1?` +${a.owners.length-1}`:""}`}
+                className={`text-xs px-3 py-1.5 rounded-full font-medium border transition-all hover:shadow-sm
+                  ${a.hasFilterSP ? "bg-indigo-50 text-indigo-700 border-indigo-200" : "bg-green-50 text-green-700 border-green-100"}`}>
+                {a.city} {a.pincode !== "—" && `(${a.pincode})`} — {a.referenceCount} contacts
+                {a.owners.length > 0 && ` · ${a.owners[0]}${a.owners.length>1?` +${a.owners.length-1}`:""}`}
               </button>
             ))}
           </div>
-          <p className="text-xs text-gray-400 mt-2">Click a pill to search that area.</p>
+          <p className="text-xs text-gray-400 mt-2">Click to search that area.</p>
         </div>
       )}
     </div>
