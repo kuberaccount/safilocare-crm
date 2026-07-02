@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
-import { getCoverageReport, getSalespersons } from "../lib/firebase"; // ✅ FINAL PATH
+import { getCoverageReport, getSalespersons } from "../lib/firebase";
 
 export default function Coverage() {
   const [data, setData] = useState([]);
-  const [salespersons, setSalespersons] = useState([]);
   const [filters, setFilters] = useState({
     city: "",
     state: "",
@@ -16,9 +15,7 @@ export default function Coverage() {
 
   const loadData = async () => {
     const res = await getCoverageReport(filters);
-    const sp = await getSalespersons();
     setData(res);
-    setSalespersons(sp);
   };
 
   return (
