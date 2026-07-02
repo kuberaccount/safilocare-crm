@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import toast from "react-hot-toast";
-import { db } from "../lib/firebase";
-import { collection, getDocs, query, orderBy } from "firebase/firestore";
+import { getContacts, getDeals, getActivities, getSalespersons } from "../lib/firebase";
 import { getSalespersons } from "../lib/firebase";
 
 // Fetch ALL contacts and deals directly — bypasses any salesperson filter
@@ -69,20 +68,30 @@ export default function CoveragePage({ currentUser }) {
   const [expandedKey, setExpandedKey] = useState(null);
 
   useEffect(() => {
-    Promise.all([fetchAll(), getSalespersons()])
-      .then(([data, sps]) => { setAllData(data); setSalespersons(sps); })
-      .catch(e => { console.error(e); toast.error("Could not load coverage data"); })
-      .finally(() => setLoading(false));
-  }, []);
+  async function loadData() {
+    try {
+      const [contacts, deals, activities, sps] = await Promise.all([
+        getContacts("admin"),   // 👈 IMPORTANT (gets ALL data)
+        getDeals("admin"),
+        getActivities("admin"),
+        getSalespersons()
+      ]);
 
-  if (loading) return (
-    <div className="p-6 flex items-center justify-center py-32 text-gray-400">
-      <div className="text-center">
-        <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"/>
-        <p className="text-sm">Loading coverage data...</p>
-      </div>
-    </div>
-  );
+      console.log("🔥 LOADED:", { contacts, deals, activities });
+
+      setAllData({ contacts, deals, activities });
+      setSalespersons(sps);
+
+    } catch (e) {
+      console.error("🔥 LOAD ERROR:", e);
+      toast.error("Failed to load coverage data");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  loadData();
+}, []);
 
   const { contacts, deals, activities } = allData;
 
