@@ -8,28 +8,17 @@ import {
   updateDoc,
   serverTimestamp,
 } from "firebase/firestore";
-import { db } from "../firebase"; // USE RELATIVE PATH
+import { db } from "../lib/firebase"; // ✅ FINAL
 
 export default function Coverage() {
   const [coverageList, setCoverageList] = useState([]);
   const [name, setName] = useState("");
-  const [loading, setLoading] = useState(true);
 
   const coverageRef = collection(db, "coverage");
 
   const fetchCoverage = async () => {
-    try {
-      const data = await getDocs(coverageRef);
-      setCoverageList(
-        data.docs.map((d) => ({
-          id: d.id,
-          ...d.data(),
-        }))
-      );
-    } catch (e) {
-      console.error(e);
-    }
-    setLoading(false);
+    const data = await getDocs(coverageRef);
+    setCoverageList(data.docs.map(d => ({ id: d.id, ...d.data() })));
   };
 
   useEffect(() => {
@@ -37,7 +26,7 @@ export default function Coverage() {
   }, []);
 
   const handleAdd = async () => {
-    if (!name.trim()) return;
+    if (!name) return;
     await addDoc(coverageRef, {
       name,
       createdAt: serverTimestamp(),
@@ -52,28 +41,22 @@ export default function Coverage() {
   };
 
   const handleUpdate = async (id) => {
-    const newName = prompt("Enter new name");
+    const newName = prompt("New name");
     if (!newName) return;
-    await updateDoc(doc(db, "coverage", id), {
-      name: newName,
-    });
+    await updateDoc(doc(db, "coverage", id), { name: newName });
     fetchCoverage();
   };
-
-  if (loading) return <p>Loading...</p>;
 
   return (
     <div style={{ padding: 20 }}>
       <h2>Coverage</h2>
 
-      <div style={{ marginBottom: 20 }}>
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Enter coverage name"
-        />
-        <button onClick={handleAdd}>Add</button>
-      </div>
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Enter name"
+      />
+      <button onClick={handleAdd}>Add</button>
 
       <ul>
         {coverageList.map((item) => (
