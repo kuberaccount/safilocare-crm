@@ -1,21 +1,24 @@
 import React, { useState, useEffect } from "react";
 import toast from "react-hot-toast";
 import { db } from "../lib/firebase";
-import { collection, getDocs, query, orderBy } from "firebase/firestore";
+import { collection, getDocs } from "firebase/firestore";
 import { getSalespersons } from "../lib/firebase";
 
-// Fetch ALL contacts and deals directly — bypasses any salesperson filter
-// so every user sees the full picture for reference lookups.
+// Fetch ALL contacts and deals directly — no orderBy to avoid index errors.
+// Sort in JS instead.
 async function fetchAll() {
   const [cSnap, dSnap, aSnap] = await Promise.all([
-    getDocs(query(collection(db, "contacts"), orderBy("createdAt", "desc"))),
-    getDocs(query(collection(db, "deals"),    orderBy("createdAt", "desc"))),
-    getDocs(query(collection(db, "activities"), orderBy("createdAt", "desc"))),
+    getDocs(collection(db, "contacts")),
+    getDocs(collection(db, "deals")),
+    getDocs(collection(db, "activities")),
   ]);
+  const sort = docs => docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
   return {
-    contacts:   cSnap.docs.map(d => ({ id: d.id, ...d.data() })),
-    deals:      dSnap.docs.map(d => ({ id: d.id, ...d.data() })),
-    activities: aSnap.docs.map(d => ({ id: d.id, ...d.data() })),
+    contacts:   sort(cSnap.docs),
+    deals:      sort(dSnap.docs),
+    activities: sort(aSnap.docs),
   };
 }
 
@@ -67,10 +70,8 @@ export default function CoveragePage({ currentUser }) {
 
   const { contacts, deals, activities } = allData;
 
-  // Skip archived and soft-deleted contacts
   const activeContacts = contacts.filter(c => !c.archived && !c.deleted);
 
-  // Build quick lookups
   const dealsByContactName = {};
   deals.forEach(d => {
     const key = (d.contact || "").trim().toLowerCase();
@@ -84,7 +85,6 @@ export default function CoveragePage({ currentUser }) {
     (actsByDealId[a.dealId] = actsByDealId[a.dealId] || []).push(a);
   });
 
-  // Enrich each contact with their deal + activity data
   const enriched = activeContacts.map(c => {
     const key = (c.name || "").trim().toLowerCase();
     const cDeals = dealsByContactName[key] || [];
@@ -97,7 +97,6 @@ export default function CoveragePage({ currentUser }) {
     };
   });
 
-  // Group by state|city|pincode
   const areaMap = {};
   enriched.forEach(c => {
     const state   = (c.state   || "").trim().toUpperCase() || "Unknown State";
@@ -124,7 +123,6 @@ export default function CoveragePage({ currentUser }) {
     };
   }).sort((a,b) => b.contactCount - a.contactCount);
 
-  // When SP filter active, float their areas to top
   if (filterSP !== "All") {
     allAreas = [...allAreas].sort((a,b) => (b.hasFilterSP?1:0) - (a.hasFilterSP?1:0));
   }
@@ -138,7 +136,6 @@ export default function CoveragePage({ currentUser }) {
       )
     : allAreas;
 
-  // City-level rollup (only when searching)
   const cityRollup = q
     ? [...new Set(matchedAreas.map(a => `${a.state}|${a.city}`))].map(ck => {
         const [state, city] = ck.split("|");
@@ -160,7 +157,6 @@ export default function CoveragePage({ currentUser }) {
 
   return (
     <div className="p-6 max-w-6xl">
-      {/* Header */}
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Coverage</h1>
@@ -179,7 +175,6 @@ export default function CoveragePage({ currentUser }) {
         </button>
       </div>
 
-      {/* Search + SP filter */}
       <div className="card p-4 mb-4">
         <div className="flex gap-3 flex-wrap items-center">
           <div className="relative flex-1 min-w-52">
@@ -200,7 +195,6 @@ export default function CoveragePage({ currentUser }) {
         </p>
       </div>
 
-      {/* City rollup — only when searching */}
       {q && cityRollup.length > 0 && (
         <div className="mb-4">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">City overview</p>
@@ -224,7 +218,6 @@ export default function CoveragePage({ currentUser }) {
         </div>
       )}
 
-      {/* Pincode table */}
       <div className="card">
         {matchedAreas.length === 0 ? (
           <div className="p-10 text-center text-gray-400 text-sm">
@@ -323,7 +316,6 @@ export default function CoveragePage({ currentUser }) {
         )}
       </div>
 
-      {/* Reference-ready areas */}
       {referenceReadyAreas.length > 0 && (
         <div className="mt-6">
           <p className="text-sm font-semibold text-gray-700 mb-2">📍 Reference-ready areas <span className="text-xs font-normal text-gray-400">— {REFERENCE_READY_MIN}+ active contacts</span></p>
