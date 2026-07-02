@@ -104,6 +104,7 @@ const EMPTY_FORM = {
 
 export default function ContactsPage({ currentUser }) {
   const isAdmin = currentUser?.role === "admin";
+  const mySalesperson = currentUser?.salesperson || "Unassigned";
   const [contacts, setContacts] = useState([]);
   const [salespersons, setSalespersons] = useState([]);
   const [search, setSearch] = useState("");
@@ -127,9 +128,6 @@ export default function ContactsPage({ currentUser }) {
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState(null); // { added, skipped }
   const importFileRef = useRef(null);
-
-  const isAdmin = currentUser?.role === "admin";
-  const mySalesperson = currentUser?.salesperson || "Unassigned";
 
   useEffect(() => { load(); }, []);
 
