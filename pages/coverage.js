@@ -17,7 +17,7 @@ export default function CoveragePage({ currentUser }) {
     // Unfiltered on purpose — every salesperson needs to see every other
     // salesperson's contacts/leads here, that's the whole point of this page.
     Promise.all([getDeals(null), getContacts(null), getActivities(null), getSalespersons()])
-      .then(([d,c,a]) => { setDeals(d); setContacts(c); setActivities(a); })
+      .then(([d,c,a,s]) => { setDeals(d); setContacts(c); setActivities(a); })
       .catch((e) => { console.error(e); toast.error("Could not load coverage data"); })
       .finally(() => setLoading(false));
   }, []);
