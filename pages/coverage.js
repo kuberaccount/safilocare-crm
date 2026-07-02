@@ -8,7 +8,7 @@ import {
   updateDoc,
   serverTimestamp,
 } from "firebase/firestore";
-import { db } from "@/firebase"; // FIXED PATH
+import { db } from "../firebase"; // USE RELATIVE PATH
 
 export default function Coverage() {
   const [coverageList, setCoverageList] = useState([]);
@@ -18,13 +18,17 @@ export default function Coverage() {
   const coverageRef = collection(db, "coverage");
 
   const fetchCoverage = async () => {
-    const data = await getDocs(coverageRef);
-    setCoverageList(
-      data.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }))
-    );
+    try {
+      const data = await getDocs(coverageRef);
+      setCoverageList(
+        data.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
+        }))
+      );
+    } catch (e) {
+      console.error(e);
+    }
     setLoading(false);
   };
 
