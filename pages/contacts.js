@@ -586,17 +586,7 @@ export default function ContactsPage({ currentUser }) {
         </Modal>
       )}
 
-      {/* Import Modal */}
-      {showImport&&(
-        <ImportModal
-          currentUser={currentUser}
-          isAdmin={isAdmin}
-          salespersons={salespersons}
-          onClose={()=>setShowImport(false)}
-          onDone={()=>{ setShowImport(false); load(); }}
-        />
-      )}
-      {/* ── Bulk Import Modal ──────────────────────────────── */}
+           {/* ── Bulk Import Modal ──────────────────────────────── */}
       {showImportModal && (
         <Modal title={`Import contacts — ${importRows.length} rows found`} onClose={()=>{ setShowImportModal(false); setImportRows([]); setImportResult(null); }}>
           <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
