@@ -1,6 +1,6 @@
 import { auth } from "../lib/firebase";
 import { signOut } from "firebase/auth";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react"; // Added useRef
 import { getDeals } from "../lib/firebase";
 
 const NAV_ALL = [
@@ -31,6 +31,9 @@ export default function Layout({ user, userData, active, onNav, isAdmin, childre
   const [showBell, setShowBell] = useState(false);
   const [todayDeals, setTodayDeals] = useState([]);
   const [overdueDeals, setOverdueDeals] = useState([]);
+  
+  // Create a ref attached to the whole notification menu block
+  const bellContainerRef = useRef(null);
 
   useEffect(() => {
     async function loadReminders() {
@@ -52,6 +55,22 @@ export default function Layout({ user, userData, active, onNav, isAdmin, childre
     loadReminders();
   }, []);
 
+  // Closes the panel automatically when clicking anywhere outside of it
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (bellContainerRef.current && !bellContainerRef.current.contains(event.target)) {
+        setShowBell(false);
+      }
+    }
+    
+    if (showBell) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showBell]);
+
   const totalAlerts = todayDeals.length + overdueDeals.length;
   const NAV = NAV_ALL.filter(n => !n.adminOnly || isAdmin);
   const avatarBg = colorFromName(user.displayName);
@@ -68,7 +87,6 @@ export default function Layout({ user, userData, active, onNav, isAdmin, childre
             <div style={{background:"white",borderRadius:"10px",padding:"6px 10px",display:"inline-flex",alignItems:"center",boxShadow:"0 2px 8px rgba(0,0,0,0.2)"}}>
               <img src="/logo.png" alt="Safilocare" style={{width:"150px",height:"52px",objectFit:"contain",objectPosition:"left center"}} onError={e=>{e.target.parentElement.style.display="none";}} />
             </div>
-
           </div>
         </div>
 
@@ -121,8 +139,8 @@ export default function Layout({ user, userData, active, onNav, isAdmin, childre
         {/* Top bar with bell */}
         <div style={{height:"48px",background:"white",borderBottom:"1px solid #f1f5f9",display:"flex",alignItems:"center",justifyContent:"flex-end",padding:"0 20px",gap:"12px",flexShrink:0}}>
 
-          {/* Bell button */}
-          <div style={{position:"relative"}}>
+          {/* Bell button container with the reference capture handler wrapper */}
+          <div style={{position:"relative"}} ref={bellContainerRef}>
             <button onClick={()=>setShowBell(v=>!v)}
               style={{width:"36px",height:"36px",borderRadius:"10px",border:"1px solid #e2e8f0",background:showBell?"#eef2ff":"white",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:totalAlerts>0?"#6366f1":"#94a3b8",transition:"all 0.15s"}}
               title="Follow-up reminders">
