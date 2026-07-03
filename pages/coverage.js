@@ -53,7 +53,7 @@ export default function CoveragePage() {
       .finally(() => setLoading(false));
   }, []);
 
-  // ── Updated Excel CSV Export Handler Function (Detailed Party List Wise) ──
+  // ── Excel CSV Export Handler Function (Detailed Party List Wise) ──
   const handleExportExcel = (dataToExport) => {
     if (!dataToExport || dataToExport.length === 0) {
       toast.error("No territory data available to export");
@@ -285,4 +285,75 @@ export default function CoveragePage() {
                           {area.owners.length > 0 ? (
                             <div className="flex flex-wrap gap-1.5">
                               {area.owners.map((owner, oIdx) => (
-                                <span key={oIdx} className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0
+                                <span key={oIdx} className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded text-xs font-medium">
+                                  👤 {owner}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-gray-300 italic text-xs">Unassigned Region</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-4 text-center">
+                          <button className="text-xs text-indigo-600 hover:text-indigo-900 font-semibold underline">
+                            {isExpanded ? "Hide Details" : "View Leads"}
+                          </button>
+                        </td>
+                      </tr>
+
+                      {/* Dropdown Drawer Section - Party List Details */}
+                      {isExpanded && (
+                        <tr className="bg-slate-50/50">
+                          <td colSpan="8" className="px-8 py-4 border-l-4 border-indigo-500 bg-indigo-50/5">
+                            <div className="p-3 bg-white border border-gray-100 rounded-xl shadow-sm">
+                              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
+                                🏢 Parties & Leads Registered in {area.city} ({area.pincode})
+                              </p>
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-left text-xs text-gray-600 divide-y divide-gray-200">
+                                  <thead>
+                                    <tr className="text-gray-400 font-medium bg-slate-50">
+                                      <th className="p-2 pl-3">Party Name / Company</th>
+                                      <th className="p-2">Phone No.</th>
+                                      <th className="p-2">Email Address</th>
+                                      <th className="p-2">Assigned Handler</th>
+                                      <th className="p-2 pr-3 text-right">Segment Tag</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-gray-100">
+                                    {area.contacts.map((contact, cIdx) => (
+                                      <tr key={cIdx} className="hover:bg-slate-50/50">
+                                        <td className="p-2 pl-3 font-semibold text-gray-800">{contact.name || "Unnamed Party"}</td>
+                                        <td className="p-2 font-mono text-gray-500">{contact.phone || "—"}</td>
+                                        <td className="p-2 text-gray-500">{contact.email || "—"}</td>
+                                        <td className="p-2">
+                                          <span className="text-gray-700 font-medium">
+                                            {contact.salesperson || "Unassigned"}
+                                          </span>
+                                        </td>
+                                        <td className="p-2 pr-3 text-right">
+                                          <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-medium text-[11px]">
+                                            {contact.type || "Lead"}
+                                          </span>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+    </div>
+  );
+}
