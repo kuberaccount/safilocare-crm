@@ -60,9 +60,10 @@ export default function CoveragePage() {
       return;
     }
 
-    // 1. Define detailed headers for individual parties
+    // 1. Define detailed headers for individual parties (Split Name & Company)
     const headings = [
-      "Party/Company Name",
+      "Contact Name",
+      "Company Name",
       "Phone Number",
       "Email Address",
       "City",
@@ -77,7 +78,8 @@ export default function CoveragePage() {
     dataToExport.forEach(area => {
       area.contacts.forEach(contact => {
         // Sanitize string text values to prevent syntax commas from breaking Excel formatting
-        const partyName = `"${(contact.name || "Unnamed Party").replace(/"/g, '""')}"`;
+        const contactName = `"${(contact.name || "Unnamed Contact").replace(/"/g, '""')}"`;
+        const companyName = `"${(contact.company || "—").replace(/"/g, '""')}"`;
         const phone = `"${(contact.phone || "—").replace(/"/g, '""')}"`;
         const email = `"${(contact.email || "—").replace(/"/g, '""')}"`;
         const city = `"${(area.city || "").replace(/"/g, '""')}"`;
@@ -86,7 +88,7 @@ export default function CoveragePage() {
         const assignedSP = `"${(contact.salesperson || "Unassigned").replace(/"/g, '""')}"`;
         const tag = `"${(contact.type || "Lead").replace(/"/g, '""')}"`;
 
-        rows.push([partyName, phone, email, city, state, pincode, assignedSP, tag].join(","));
+        rows.push([contactName, companyName, phone, email, city, state, pincode, assignedSP, tag].join(","));
       });
     });
 
@@ -313,7 +315,8 @@ export default function CoveragePage() {
                                 <table className="w-full text-left text-xs text-gray-600 divide-y divide-gray-200">
                                   <thead>
                                     <tr className="text-gray-400 font-medium bg-slate-50">
-                                      <th className="p-2 pl-3">Party Name / Company</th>
+                                      <th className="p-2 pl-3">Contact Name</th>
+                                      <th className="p-2">Company Name</th>
                                       <th className="p-2">Phone No.</th>
                                       <th className="p-2">Email Address</th>
                                       <th className="p-2">Assigned Handler</th>
@@ -323,7 +326,8 @@ export default function CoveragePage() {
                                   <tbody className="divide-y divide-gray-100">
                                     {area.contacts.map((contact, cIdx) => (
                                       <tr key={cIdx} className="hover:bg-slate-50/50">
-                                        <td className="p-2 pl-3 font-semibold text-gray-800">{contact.name || "Unnamed Party"}</td>
+                                        <td className="p-2 pl-3 font-semibold text-gray-800">{contact.name || "Unnamed Contact"}</td>
+                                        <td className="p-2 text-gray-500 font-medium">{contact.company || "—"}</td>
                                         <td className="p-2 font-mono text-gray-500">{contact.phone || "—"}</td>
                                         <td className="p-2 text-gray-500">{contact.email || "—"}</td>
                                         <td className="p-2">
