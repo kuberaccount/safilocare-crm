@@ -19,7 +19,7 @@ export default function Dashboard({ user, userData }) {
     contacts:   <ContactsPage currentUser={userData} />,
     pipeline:   <PipelinePage currentUser={userData} />,
     activities: <ActivitiesPage currentUser={userData} />, 
-    reports:    <RportsPage currentUser={userData} />
+    reports:    <ReportsPage currentUser={userData} />
     coverage:    <CoveragePage currentUser={userData} />,
     ...(isAdmin ? { admin: <AdminPage />, teamreport: <TeamReportPage /> } : {}),
   };
