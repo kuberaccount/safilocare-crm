@@ -3,7 +3,7 @@ import toast from "react-hot-toast";
 import { db } from "../lib/firebase";
 import { collection, getDocs } from "firebase/firestore";
 
-// ── Fetch all data safely avoiding missing function exports ──
+// ── Fetch all data safely ──
 async function fetchAll() {
   let cSnap = { docs: [] };
   let pSnap = { docs: [] };
@@ -39,6 +39,9 @@ export default function CoveragePage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterSP, setFilterSP] = useState("All");
+  
+  // Track which row is currently clicked open
+  const [expandedKey, setExpandedKey] = useState(null);
 
   useEffect(() => {
     fetchAll()
@@ -100,6 +103,7 @@ export default function CoveragePage() {
 
     return {
       ...area,
+      key: `${area.state}|${area.city}|${area.pincode}`,
       contactCount: area.contacts.length,
       activeCount,
       wonCount,
@@ -130,7 +134,7 @@ export default function CoveragePage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Safilo Regional Coverage</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Search pincodes or cities to find active coverage allocations and safely assign new incoming leads.
+          Search pincodes or cities to find active coverage allocations. Click on any row to view specific leads and parties in that area.
         </p>
       </div>
 
@@ -172,7 +176,7 @@ export default function CoveragePage() {
         </div>
       </div>
 
-      {/* Main Analysis Data Matrix Grid Layout Table */}
+      {/* Main Analysis Data Matrix */}
       <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
         {matchedAreas.length === 0 ? (
           <div className="p-12 text-center text-gray-400">
@@ -188,35 +192,102 @@ export default function CoveragePage() {
                   <th className="px-6 py-3">State</th>
                   <th className="px-6 py-3">Pincode</th>
                   <th className="px-6 py-3 text-center">Contacts Count</th>
-                  <th className="px-6 py-3 text-center">Active Pipeline Items</th>
+                  <th className="px-6 py-3 text-center">Active Pipelines</th>
                   <th className="px-6 py-3 text-center">Deals Won</th>
                   <th className="px-6 py-3">Covering Salesperson(s)</th>
+                  <th className="px-4 py-3 text-center">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {matchedAreas.map((area, index) => (
-                  <tr key={index} className={`hover:bg-gray-50/80 transition-colors ${area.hasFilterSP ? "bg-indigo-50/30 font-medium" : ""}`}>
-                    <td className="px-6 py-4 font-semibold text-gray-900">{area.city}</td>
-                    <td className="px-6 py-4 text-gray-500 text-xs">{area.state}</td>
-                    <td className="px-6 py-4 font-mono text-xs font-semibold tracking-wide text-indigo-600">{area.pincode}</td>
-                    <td className="px-6 py-4 text-center font-bold text-slate-800">{area.contactCount}</td>
-                    <td className="px-6 py-4 text-center font-semibold text-amber-600">{area.activeCount}</td>
-                    <td className="px-6 py-4 text-center font-bold text-emerald-600">{area.wonCount}</td>
-                    <td className="px-6 py-4">
-                      {area.owners.length > 0 ? (
-                        <div className="flex flex-wrap gap-1.5">
-                          {area.owners.map((owner, oIdx) => (
-                            <span key={oIdx} className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded text-xs font-medium">
-                              👤 {owner}
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-gray-300 italic text-xs">Unassigned Region Territory</span>
+                {matchedAreas.map((area, index) => {
+                  const isExpanded = expandedKey === area.key;
+                  return (
+                    <React.Fragment key={index}>
+                      {/* Main Clickable Row */}
+                      <tr 
+                        onClick={() => setExpandedKey(isExpanded ? null : area.key)}
+                        className={`cursor-pointer transition-colors hover:bg-slate-50/80 ${area.hasFilterSP ? "bg-indigo-50/20" : ""} ${isExpanded ? "bg-slate-50 font-medium" : ""}`}
+                      >
+                        <td className="px-6 py-4 font-semibold text-gray-900 flex items-center gap-2">
+                          <span className={`text-xs text-gray-400 transform transition-transform ${isExpanded ? "rotate-90" : ""}`}>▶</span>
+                          {area.city}
+                        </td>
+                        <td className="px-6 py-4 text-gray-500 text-xs">{area.state}</td>
+                        <td className="px-6 py-4 font-mono text-xs font-semibold tracking-wide text-indigo-600">{area.pincode}</td>
+                        <td className="px-6 py-4 text-center font-bold text-slate-800">
+                          <span className="bg-slate-100 text-slate-700 px-2.5 py-1 rounded-full text-xs">
+                            {area.contactCount}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-center font-semibold text-amber-600">{area.activeCount}</td>
+                        <td className="px-6 py-4 text-center font-bold text-emerald-600">{area.wonCount}</td>
+                        <td className="px-6 py-4">
+                          {area.owners.length > 0 ? (
+                            <div className="flex flex-wrap gap-1.5">
+                              {area.owners.map((owner, oIdx) => (
+                                <span key={oIdx} className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded text-xs font-medium">
+                                  👤 {owner}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-gray-300 italic text-xs">Unassigned Region</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-4 text-center">
+                          <button className="text-xs text-indigo-600 hover:text-indigo-900 font-semibold underline">
+                            {isExpanded ? "Hide Details" : "View Leads"}
+                          </button>
+                        </td>
+                      </tr>
+
+                      {/* Dropdown Embedded Content — Displays the matching Parties/Leads details */}
+                      {isExpanded && (
+                        <tr className="bg-slate-50/50">
+                          <td colSpan="8" className="px-8 py-4 border-l-4 border-indigo-500 bg-indigo-50/5">
+                            <div className="p-3 bg-white border border-gray-100 rounded-xl shadow-sm">
+                              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
+                                🏢 Parties & Leads Registered in {area.city} ({area.pincode})
+                              </p>
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-left text-xs text-gray-600 divide-y divide-gray-200">
+                                  <thead>
+                                    <tr className="text-gray-400 font-medium bg-slate-50">
+                                      <th className="p-2 pl-3">Party Name / Company</th>
+                                      <th className="p-2">Phone No.</th>
+                                      <th className="p-2">Email Address</th>
+                                      <th className="p-2">Assigned Handler</th>
+                                      <th className="p-2 pr-3 text-right">Segment Tag</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-gray-100">
+                                    {area.contacts.map((contact, cIdx) => (
+                                      <tr key={cIdx} className="hover:bg-slate-50/50">
+                                        <td className="p-2 pl-3 font-semibold text-gray-800">{contact.name || "Unnamed Party"}</td>
+                                        <td className="p-2 font-mono text-gray-500">{contact.phone || "—"}</td>
+                                        <td className="p-2 text-gray-500">{contact.email || "—"}</td>
+                                        <td className="p-2">
+                                          <span className="text-gray-700 font-medium">
+                                            {contact.salesperson || "Unassigned"}
+                                          </span>
+                                        </td>
+                                        <td className="p-2 pr-3 text-right">
+                                          <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-medium text-[11px]">
+                                            {contact.type || "Lead"}
+                                          </span>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
                       )}
-                    </td>
-                  </tr>
-                ))}
+                    </React.Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
