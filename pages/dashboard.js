@@ -4,6 +4,7 @@ import ContactsPage from "./contacts";
 import PipelinePage from "./pipeline";
 import ActivitiesPage from "./activities";
 import ReportsPage from "./reports";
+import CoveragePage from "./coverage";
 import AdminPage from "./admin";
 import TeamReportPage from "./teamreport";
 
@@ -18,7 +19,7 @@ export default function Dashboard({ user, userData }) {
     contacts:   <ContactsPage currentUser={userData} />,
     pipeline:   <PipelinePage currentUser={userData} />,
     activities: <ActivitiesPage currentUser={userData} />,
-    reports:    <ReportsPage currentUser={userData} />,
+    coverage:    <CoveragePage currentUser={userData} />,
     ...(isAdmin ? { admin: <AdminPage />, teamreport: <TeamReportPage /> } : {}),
   };
 
