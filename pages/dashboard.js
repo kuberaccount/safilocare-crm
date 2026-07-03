@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Layout from "../components/Layout";
 import ContactsPage from "./contacts";
 import PipelinePage from "./pipeline";
@@ -9,8 +9,21 @@ import AdminPage from "./admin";
 import TeamReportPage from "./teamreport";
 
 export default function Dashboard({ user, userData }) {
-  const [page, setPage] = useState("dashboard");
+  // Initialize state from localStorage if available, otherwise default to "dashboard"
+  const [page, setPage] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("crm_active_tab") || "dashboard";
+    }
+    return "dashboard";
+  });
+
   const isAdmin = userData?.role === "admin";
+
+  // Custom function to handle navigation changes and save them persistently
+  const handleNav = (newPage) => {
+    setPage(newPage);
+    localStorage.setItem("crm_active_tab", newPage);
+  };
 
   // Guard: don't render until user is available
   if (!user) return null;
@@ -19,23 +32,23 @@ export default function Dashboard({ user, userData }) {
     contacts:   <ContactsPage currentUser={userData} />,
     pipeline:   <PipelinePage currentUser={userData} />,
     activities: <ActivitiesPage currentUser={userData} />,
-    coverage: <CoveragePage currentUser={userData} />,
+    coverage:   <CoveragePage currentUser={userData} />,
     reports:    <ReportsPage currentUser={userData} />,
     ...(isAdmin ? { admin: <AdminPage />, teamreport: <TeamReportPage /> } : {}),
   };
 
   return (
-    <Layout user={user} userData={userData} active={page} onNav={setPage} isAdmin={isAdmin}>
+    <Layout user={user} userData={userData} active={page} onNav={handleNav} isAdmin={isAdmin}>
       {page === "dashboard"
-        ? <DashboardHome onNav={setPage} user={user} userData={userData} isAdmin={isAdmin} />
+        ? <DashboardHome onNav={handleNav} user={user} userData={userData} isAdmin={isAdmin} />
         : pages[page]}
     </Layout>
   );
 }
 
 const QUICK = [
-  { label:"Contacts",   page:"contacts",   emoji:"👥", desc:"Manage your B2B leads",      grad:"linear-gradient(135deg,#6366f1,#8b5cf6)" },
-  { label:"Pipeline",   page:"pipeline",   emoji:"📊", desc:"Track deals & stages",        grad:"linear-gradient(135deg,#f59e0b,#ef4444)" },
+  { label:"Contacts",   page:"contacts",   emoji:"👥", desc:"Manage your B2B leads",     grad:"linear-gradient(135deg,#6366f1,#8b5cf6)" },
+  { label:"Pipeline",   page:"pipeline",   emoji:"📊", desc:"Track deals & stages",       grad:"linear-gradient(135deg,#f59e0b,#ef4444)" },
   { label:"Activities", page:"activities", emoji:"📝", desc:"Emails, calls, meetings",     grad:"linear-gradient(135deg,#10b981,#059669)" },
   { label:"Reports",    page:"reports",    emoji:"📈", desc:"Analytics & insights",        grad:"linear-gradient(135deg,#3b82f6,#6366f1)" },
 ];
@@ -62,21 +75,21 @@ function DashboardHome({ onNav, user, userData, isAdmin }) {
             {isAdmin ? "Admin — full access to all data" : `Salesperson · ${userData?.salesperson || "Unassigned"}`}
           </p>
         </div>
-        {/* Right — motivational line. To change it, just edit the text below. */}
+        {/* Right — motivational line. */}
         <div style={{position:"relative",zIndex:1,textAlign:"center",flex:1,display:"flex",justifyContent:"center"}}>
-  <p style={{
-    margin:0,
-    fontSize:"20px",
-    fontWeight:700,
-    color:"#a5b4fc",
-    letterSpacing:"0.08em",
-    lineHeight:1.6,
-    textTransform:"uppercase",
-    whiteSpace:"nowrap",
-  }}>
-    NO TIMELINE · NO EXECUTION · NO RESULT
-  </p>
-</div>
+          <p style={{
+            margin:0,
+            fontSize:"20px",
+            fontWeight:700,
+            color:"#a5b4fc",
+            letterSpacing:"0.08em",
+            lineHeight:1.6,
+            textTransform:"uppercase",
+            whiteSpace:"nowrap",
+          }}>
+            NO TIMELINE · NO EXECUTION · NO RESULT
+          </p>
+        </div>
       </div>
 
       <div style={{ padding:"24px" }}>
