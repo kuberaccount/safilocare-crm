@@ -18,9 +18,9 @@ export default function Dashboard({ user, userData }) {
   const pages = {
     contacts:   <ContactsPage currentUser={userData} />,
     pipeline:   <PipelinePage currentUser={userData} />,
-    activities: <ActivitiesPage currentUser={userData} />, 
-    reports:    <ReportsPage currentUser={userData} />
-    coverage:    <CoveragePage currentUser={userData} />,
+    activities: <ActivitiesPage currentUser={userData} />,
+    coverage: <CoveragePage currentUser={userData} />,
+    reports:    <ReportsPage currentUser={userData} />,
     ...(isAdmin ? { admin: <AdminPage />, teamreport: <TeamReportPage /> } : {}),
   };
 
