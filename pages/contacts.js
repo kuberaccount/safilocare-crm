@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { useState, useEffect, useRef } from "react";
 import { getContacts, addContact, updateContact, deleteContact, checkDuplicatePhone, getSalespersons, addSalesperson, deleteSalesperson } from "../lib/firebase";
-import { softDeleteContact, restoreContact, permanentDeleteContact, getDeletedContacts } from "../lib/firebase";
+import { softDeleteContact, restoreContact, permanentDeleteContact, getDeletedContacts, createNotification } from "../lib/firebase";
 import { logAction } from "../lib/activitylog";
 import Modal from "../components/Modal";
 import toast from "react-hot-toast";
@@ -182,11 +182,39 @@ export default function ContactsPage({ currentUser }) {
     setSaving(true);
     try {
       if(editContact) {
+        // Notify salesperson if assignment changed
+        const prevSP = editContact.salesperson;
+        const newSP  = form.salesperson;
+        if (isAdmin && newSP && newSP !== "Unassigned" && newSP !== prevSP) {
+          try {
+            await createNotification({
+              toSalesperson: newSP,
+              type: "contact_assigned",
+              title: "New contact assigned to you",
+              body: `${form.name}${form.company ? " · " + form.company : ""}`,
+              refId: editContact.id,
+              refType: "contact",
+            });
+          } catch {}
+        }
         await updateContact(editContact.id, form);
         try { await logAction(currentUser, "Updated Contact", { contactName: form.name }); } catch {}
         toast.success("Contact updated ✅");
       } else {
-        await addContact(form);
+        const ref = await addContact(form);
+        // Notify salesperson on new contact assignment
+        if (isAdmin && form.salesperson && form.salesperson !== "Unassigned") {
+          try {
+            await createNotification({
+              toSalesperson: form.salesperson,
+              type: "contact_assigned",
+              title: "New contact assigned to you",
+              body: `${form.name}${form.company ? " · " + form.company : ""}`,
+              refId: ref?.id || "",
+              refType: "contact",
+            });
+          } catch {}
+        }
         try { await logAction(currentUser, "Added Contact", { contactName: form.name }); } catch {}
         toast.success("Contact added ✅");
       }
