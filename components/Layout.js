@@ -1,7 +1,7 @@
 import { auth } from "../lib/firebase";
 import { signOut } from "firebase/auth";
 import { useState, useEffect, useRef } from "react"; // Added useRef
-import { getDeals } from "../lib/firebase";
+import { getDeals, getNotifications, markAllNotificationsRead } from "../lib/firebase";
 
 const NAV_ALL = [
   { key:"dashboard",  label:"Dashboard",  icon:<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg> },
@@ -31,29 +31,45 @@ export default function Layout({ user, userData, active, onNav, isAdmin, childre
   const [showBell, setShowBell] = useState(false);
   const [todayDeals, setTodayDeals] = useState([]);
   const [overdueDeals, setOverdueDeals] = useState([]);
-  
-  // Create a ref attached to the whole notification menu block
+  const [assignmentNotifs, setAssignmentNotifs] = useState([]);
+
   const bellContainerRef = useRef(null);
 
   useEffect(() => {
-    async function loadReminders() {
-      try {
-        const sp = userData?.role !== "admin" ? userData?.salesperson : null;
-        const deals = await getDeals(sp);
-        const today = new Date(new Date().toDateString());
-        const tomorrow = new Date(today); tomorrow.setDate(today.getDate()+1);
-        const td = [], od = [];
-        deals.filter(d => !["Won","Lost"].includes(d.stage) && d.followUpDate).forEach(d => {
-          const fd = parseFollowUpDate(d.followUpDate);
-          if (!fd || isNaN(fd)) return;
-          if (fd < today) od.push(d);
-          else if (fd >= today && fd < tomorrow) td.push(d);
-        });
-        setTodayDeals(td); setOverdueDeals(od);
-      } catch(e) { console.error(e); }
-    }
     loadReminders();
+    // Poll every 2 minutes for new notifications
+    const interval = setInterval(loadReminders, 120000);
+    return () => clearInterval(interval);
   }, []);
+
+  async function loadReminders() {
+    try {
+      const sp = userData?.role !== "admin" ? userData?.salesperson : null;
+      const [deals, notifs] = await Promise.all([
+        getDeals(sp),
+        userData?.salesperson ? getNotifications(userData.salesperson) : Promise.resolve([]),
+      ]);
+      const today = new Date(new Date().toDateString());
+      const tomorrow = new Date(today); tomorrow.setDate(today.getDate()+1);
+      const td = [], od = [];
+      deals.filter(d => !["Won","Lost"].includes(d.stage) && d.followUpDate).forEach(d => {
+        const fd = parseFollowUpDate(d.followUpDate);
+        if (!fd || isNaN(fd)) return;
+        if (fd < today) od.push(d);
+        else if (fd >= today && fd < tomorrow) td.push(d);
+      });
+      setTodayDeals(td);
+      setOverdueDeals(od);
+      setAssignmentNotifs(notifs.filter(n => !n.read));
+    } catch(e) { console.error(e); }
+  }
+
+  async function handleMarkRead() {
+    if (userData?.salesperson) {
+      await markAllNotificationsRead(userData.salesperson);
+      setAssignmentNotifs([]);
+    }
+  }
 
   // Closes the panel automatically when clicking anywhere outside of it
   useEffect(() => {
@@ -71,7 +87,7 @@ export default function Layout({ user, userData, active, onNav, isAdmin, childre
     };
   }, [showBell]);
 
-  const totalAlerts = todayDeals.length + overdueDeals.length;
+  const totalAlerts = todayDeals.length + overdueDeals.length + assignmentNotifs.length;
   const NAV = NAV_ALL.filter(n => !n.adminOnly || isAdmin);
   const avatarBg = colorFromName(user.displayName);
 
@@ -158,11 +174,37 @@ export default function Layout({ user, userData, active, onNav, isAdmin, childre
             {showBell && (
               <div style={{position:"absolute",right:0,top:"44px",width:"320px",background:"white",borderRadius:"14px",border:"1px solid #e2e8f0",boxShadow:"0 20px 60px rgba(0,0,0,0.15)",zIndex:100,overflow:"hidden"}}>
                 <div style={{padding:"14px 16px",borderBottom:"1px solid #f1f5f9",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                  <p style={{fontSize:"13px",fontWeight:700,color:"#0f172a",margin:0}}>Follow-up Reminders</p>
-                  <span style={{fontSize:"11px",color:"#94a3b8"}}>{totalAlerts} alert{totalAlerts!==1?"s":""}</span>
+                  <p style={{fontSize:"13px",fontWeight:700,color:"#0f172a",margin:0}}>Notifications</p>
+                  <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
+                    <span style={{fontSize:"11px",color:"#94a3b8"}}>{totalAlerts} alert{totalAlerts!==1?"s":""}</span>
+                    {assignmentNotifs.length > 0 && (
+                      <button onClick={handleMarkRead}
+                        style={{fontSize:"11px",color:"#6366f1",background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:600}}>
+                        Mark read
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                <div style={{maxHeight:"340px",overflowY:"auto"}}>
+                <div style={{maxHeight:"380px",overflowY:"auto"}}>
+
+                  {/* ── Assignment notifications ── */}
+                  {assignmentNotifs.length > 0 && (
+                    <div>
+                      <p style={{fontSize:"10px",fontWeight:700,color:"#6366f1",textTransform:"uppercase",letterSpacing:"0.08em",padding:"10px 16px 4px",margin:0,background:"#eef2ff"}}>🔔 New assignments</p>
+                      {assignmentNotifs.map(n => (
+                        <div key={n.id} style={{padding:"10px 16px",borderBottom:"1px solid #f8fafc",cursor:"pointer",background:"#fafafa"}}
+                          onClick={() => { onNav(n.refType === "contact" ? "contacts" : "pipeline"); setShowBell(false); }}>
+                          <p style={{fontSize:"13px",fontWeight:600,color:"#0f172a",margin:"0 0 2px"}}>{n.title}</p>
+                          <p style={{fontSize:"11px",color:"#64748b",margin:0}}>{n.body}</p>
+                          <p style={{fontSize:"10px",color:"#94a3b8",margin:"2px 0 0"}}>
+                            {n.createdAt?.toDate ? n.createdAt.toDate().toLocaleString("en-IN",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}) : "Just now"}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   {todayDeals.length > 0 && (
                     <div>
                       <p style={{fontSize:"10px",fontWeight:700,color:"#059669",textTransform:"uppercase",letterSpacing:"0.08em",padding:"10px 16px 4px",margin:0,background:"#f0fdf4"}}>📅 Today</p>
@@ -192,7 +234,8 @@ export default function Layout({ user, userData, active, onNav, isAdmin, childre
                   {totalAlerts === 0 && (
                     <div style={{padding:"30px 16px",textAlign:"center"}}>
                       <p style={{fontSize:"24px",margin:"0 0 8px"}}>✅</p>
-                      <p style={{fontSize:"13px",color:"#94a3b8",margin:0}}>No follow-ups due today!</p>
+                      <p style={{fontSize:"13px",color:"#94a3b8",margin:0}}>All caught up!</p>
+                      <p style={{fontSize:"11px",color:"#cbd5e1",margin:"4px 0 0"}}>No assignments or follow-ups pending</p>
                     </div>
                   )}
                 </div>
