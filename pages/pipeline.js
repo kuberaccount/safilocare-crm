@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { logAction } from "../lib/activitylog";
-import { getDeals, addDeal, updateDeal, deleteDeal, addActivity, getActivitiesForDeal, getSalespersons, getContacts } from "../lib/firebase";
+import { getDeals, addDeal, updateDeal, deleteDeal, addActivity, getActivitiesForDeal, getSalespersons, getContacts, createNotification } from "../lib/firebase";
 import Modal from "../components/Modal";
 import toast from "react-hot-toast";
 
@@ -183,12 +183,40 @@ export default function PipelinePage({ currentUser }) {
     setSaving(true);
     try {
       if (editDeal) {
+        // Notify if salesperson assignment changed
+        const prevSP = editDeal.salesperson;
+        const newSP  = finalForm.salesperson;
+        if (isAdmin && newSP && newSP !== "Unassigned" && newSP !== prevSP) {
+          try {
+            await createNotification({
+              toSalesperson: newSP,
+              type: "deal_assigned",
+              title: "New lead assigned to you",
+              body: `${finalForm.title}${finalForm.company ? " · " + finalForm.company : ""} (${finalForm.stage})`,
+              refId: editDeal.id,
+              refType: "deal",
+            });
+          } catch {}
+        }
         await updateDeal(editDeal.id, finalForm);
         toast.success("Deal updated ✅");
         const action = finalForm.stage === "Won" ? "Won Deal" : finalForm.followUpDate !== editDeal.followUpDate ? "Marked Follow-up" : "Updated Lead";
         await safeLog(() => logAction(currentUser, action, { dealTitle: finalForm.title, stage: finalForm.stage, followUpDate: finalForm.followUpDate }));
       } else {
-        await addDeal(finalForm);
+        const ref = await addDeal(finalForm);
+        // Notify salesperson on new deal assignment
+        if (isAdmin && finalForm.salesperson && finalForm.salesperson !== "Unassigned") {
+          try {
+            await createNotification({
+              toSalesperson: finalForm.salesperson,
+              type: "deal_assigned",
+              title: "New lead assigned to you",
+              body: `${finalForm.title}${finalForm.company ? " · " + finalForm.company : ""} (${finalForm.stage})`,
+              refId: ref?.id || "",
+              refType: "deal",
+            });
+          } catch {}
+        }
         toast.success("Deal added ✅");
         await safeLog(() => logAction(currentUser, "Added Lead", { dealTitle: finalForm.title, contact: finalForm.contact, company: finalForm.company }));
       }
