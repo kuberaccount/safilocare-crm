@@ -87,7 +87,7 @@ function DashboardHome({ onNav, user, userData, isAdmin }) {
             textTransform:"uppercase",
             whiteSpace:"nowrap",
           }}>
-            NO TIMELINE · NO EXECUTION · NO RESULT
+            આનો ઉપયોગ કરો અલ્યા, આ મફત છે 😂
           </p>
         </div>
       </div>
